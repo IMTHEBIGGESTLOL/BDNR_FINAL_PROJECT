@@ -1,0 +1,12 @@
+#MongoDB
+fastapi[all]
+pydantic
+pymongo
+requests
+
+#DGraph
+pydgraph
+
+#Cassandra
+cassandra-driver
+time_uuid
