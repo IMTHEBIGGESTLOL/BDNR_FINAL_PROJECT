@@ -1,46 +1,72 @@
-from contextlib import asynccontextmanager
 import os
-
-#CASSANDRA DRIVERS 
 from cassandra.cluster import Cluster
-from collections import defaultdict
+from pymongo import MongoClient
+import pydgraph
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
 
 from Cassandra import model
+from DGraph import modeldgraph
+from Mongodb.routes import router as db_router
 
-# Read env vars releated to Cassandra App
+# Configuración de entornos
 CLUSTER_IPS = os.getenv('CASSANDRA_CLUSTER_IPS', 'localhost')
 KEYSPACE = os.getenv('CASSANDRA_KEYSPACE', 'final_project')
 REPLICATION_FACTOR = os.getenv('CASSANDRA_REPLICATION_FACTOR', '1')
 
-#DGRAPH DRIVERS AND LIBRERIES
-import pydgraph
-
-from DGraph import modeldgraph
-
 DGRAPH_URI = os.getenv('DGRAPH_URI', 'localhost:9080')
-
-def create_client_stub():
-    return pydgraph.DgraphClientStub(DGRAPH_URI)
-
-
-def create_client(client_stub):
-    return pydgraph.DgraphClient(client_stub)
-
-
-def close_client_stub(client_stub):
-    client_stub.close()
-
-#MONGODB DRIVERS
-from fastapi import FastAPI
-from pymongo import MongoClient
-
-from Mongodb.routes import router as db_router
-
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
 DB_NAME = os.getenv('MONGODB_DB_NAME', 'final_project')
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Initializing databases...")
+
+    # MongoDB
+    mongodb_client = MongoClient(MONGODB_URI)
+    mongodb_database = mongodb_client[DB_NAME]
+    app.state.mongodb_client = mongodb_client
+    app.state.mongodb_database = mongodb_database
+    print(f"Connected to MongoDB at: {MONGODB_URI}, Database: {DB_NAME}")
+
+    # Cassandra
+    cassandra_cluster = Cluster(CLUSTER_IPS.split(','))
+    cassandra_session = cassandra_cluster.connect()
+    model.create_keyspace(cassandra_session, KEYSPACE, REPLICATION_FACTOR)
+    cassandra_session.set_keyspace(KEYSPACE)
+    model.create_schema(cassandra_session)
+    app.state.cassandra_cluster = cassandra_cluster
+    app.state.cassandra_session = cassandra_session
+    print("Cassandra initialized.")
+
+    # Dgraph
+    dgraph_client_stub = pydgraph.DgraphClientStub(DGRAPH_URI)
+    dgraph_client = pydgraph.DgraphClient(dgraph_client_stub)
+    modeldgraph.set_schema(dgraph_client)
+    app.state.dgraph_client_stub = dgraph_client_stub
+    app.state.dgraph_client = dgraph_client
+    print("Dgraph initialized.")
+
+    # Yield control to the app
+    try:
+        yield
+    finally:
+        # Clean up resources
+        print("Shutting down databases...")
+        cassandra_session.shutdown()
+        cassandra_cluster.shutdown()
+        mongodb_client.close()
+        dgraph_client_stub.close()
+        print("All database connections closed.")
+
+app = FastAPI(lifespan=lifespan)
+
+# Rutas de FastAPI
+app.include_router(db_router, tags=["project"], prefix="/project")
+
+# Menú interactivo
 def print_menu():
-    mm_options = {
+    menu_options = {
         1: "Create data",
         2: "Search user",
         3: "Delete",
@@ -49,48 +75,43 @@ def print_menu():
         6: "Drop All",
         7: "Exit",
     }
-    for key in mm_options.keys():
-        print(key, '--', mm_options[key])
+    for key, value in menu_options.items():
+        print(f"{key} -- {value}")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Lógica de inicialización
-    app.mongodb_client = MongoClient(MONGODB_URI)
-    app.database = app.mongodb_client[DB_NAME]
+def menu_handler():
+    """
+    Muestra un menú interactivo y maneja las opciones seleccionadas.
+    """
+    while True:
+        print_menu()
+        try:
+            choice = int(input("Select an option: "))
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+            continue
 
-    #Cassandra inicialization
-    cluster = Cluster(CLUSTER_IPS.split(','))
-    session = cluster.connect()
+        if choice == 7:  # Exit
+            print("Exiting...")
+            break
 
-    model.create_keyspace(session, KEYSPACE, REPLICATION_FACTOR)
-    session.set_keyspace(KEYSPACE)
+        if choice not in range(1, 8):
+            print("Invalid option. Please try again.")
+        else:
+            print(f"Option {choice} selected.")
+            # Aquí se puede implementar lógica específica para cada opción
 
-    model.create_schema(session)
+if __name__ == "__main__":
+    print("Choose a mode to run:")
+    print("1 -- Run FastAPI server")
+    print("2 -- Run console menu")
+    mode = input("Enter your choice (1/2): ").strip()
 
-    #DGRAPH inicialization
-     # Init Client Stub and Dgraph Client
-    client_stub = create_client_stub()
-    client = create_client(client_stub)
-
-    # Create schema
-    modeldgraph.set_schema(client)
-
-    print(f"Connected to MongoDB at: {MONGODB_URI} \n\t Database: {DB_NAME}")
-        
-    # Esto permite que la aplicación funcione mientras se gestiona el ciclo de vida
-    yield
-
-    # Lógica de limpieza al finalizar
-    app.mongodb_client.close()
-    print("Bye bye...!!")
-
-app = FastAPI(lifespan=lifespan)
-
-app.include_router(db_router, tags=["project"], prefix="/project")
-
-def main():
-
-    print("hola santana")
-
-if __name__ == '__main__':
-    main()
+    if mode == "1":
+        # Ejecutar servidor FastAPI
+        import uvicorn
+        uvicorn.run(app, host="127.0.0.1", port=8000)
+    elif mode == "2":
+        # Ejecutar menú interactivo
+        menu_handler()
+    else:
+        print("Invalid mode selected. Exiting.")
