@@ -11,6 +11,16 @@ CREATE_KEYSPACE = """
         WITH replication = {{ 'class': 'SimpleStrategy', 'replication_factor': {} }}
 """
 
+CREATE_TEST = """
+    CREATE TABLE IF NOT EXISTS users_by_id (
+        user_id UUID, 
+        username TEXT, 
+        email TEXT, 
+        role TEXT,
+        PRIMARY KEY ((user_id))
+    );
+"""
+
 CREATE_TICKET_BY_DATE_TABLE = """
     CREATE TABLE IF NOT EXISTS ticket_by_date (
         created_date DATE,

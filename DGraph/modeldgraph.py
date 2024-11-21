@@ -53,3 +53,105 @@ def set_schema(client):
     created_tickets: [uid] .
     """
     return client.alter(pydgraph.Operation(schema=schema))
+
+import uuid
+from datetime import datetime
+
+def create_data(client):
+    # Create a new transaction.
+    txn = client.txn()
+    try:
+        p = [
+            # Users (Pet Wellness Project)
+            {
+                'uid': f'_:user{1}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'petlover1',
+                'email': 'petlover1@example.com',
+                'role': 'user'
+            },
+            {
+                'uid': f'_:user{2}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'petlover2',
+                'email': 'petlover2@example.com',
+                'role': 'agent'
+            },
+            {
+                'uid': f'_:user{3}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'vet1',
+                'email': 'vet1@example.com',
+                'role': 'agent'
+            },
+            {
+                'uid': f'_:user{4}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'trainer1',
+                'email': 'trainer1@example.com',
+                'role': 'user'
+            },
+            {
+                'uid': f'_:user{5}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'admin1',
+                'email': 'admin1@example.com',
+                'role': 'agent'
+            },
+            {
+                'uid': f'_:user{6}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'petlover3',
+                'email': 'petlover3@example.com',
+                'role': 'user'
+            },
+            {
+                'uid': f'_:user{7}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'vet2',
+                'email': 'vet2@example.com',
+                'role': 'agent'
+            },
+            {
+                'uid': f'_:user{8}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'trainer2',
+                'email': 'trainer2@example.com',
+                'role': 'user'
+            },
+            {
+                'uid': f'_:user{9}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'admin2',
+                'email': 'admin2@example.com',
+                'role': 'agent'
+            },
+            {
+                'uid': f'_:user{10}',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'petlover4',
+                'email': 'petlover4@example.com',
+                'role': 'user'
+            }
+        ]
+
+        # Mutate the data
+        response = txn.mutate(set_obj=p)
+
+        # Commit the transaction.
+        commit_response = txn.commit()
+        print(f"Commit Response: {commit_response}")
+        print(f"UIDs: {response.uids}")
+    finally:
+        # Clean up. Calling this after txn.commit() is a no-op and hence safe.
+        txn.discard()

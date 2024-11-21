@@ -18,6 +18,9 @@ DGRAPH_URI = os.getenv('DGRAPH_URI', 'localhost:9080')
 MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
 DB_NAME = os.getenv('MONGODB_DB_NAME', 'final_project')
 
+dgraph_client_stub = pydgraph.DgraphClientStub(DGRAPH_URI)
+dgraph_client = pydgraph.DgraphClient(dgraph_client_stub)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Initializing databases...")
@@ -73,7 +76,8 @@ def print_menu():
         4: "Search Channel",
         5: "Advanced Queries (Pagination, Count)",
         6: "Drop All",
-        7: "Exit",
+        7: "Insert Bulk Data into Databases",  # New option to insert bulk data
+        8: "Exit",
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -90,11 +94,17 @@ def menu_handler():
             print("Invalid input. Please enter a number.")
             continue
 
-        if choice == 7:  # Exit
+        if choice == 8:  # Exit
             print("Exiting...")
             break
 
-        if choice not in range(1, 8):
+        if choice == 7:  # Insert bulk data
+            print("Inserting bulk data into MongoDB, Cassandra, and Dgraph...")
+            #insert dgraph 
+            modeldgraph.create_data(dgraph_client)
+            print("Data inserted successfully.")
+        
+        if choice not in range(1, 9):
             print("Invalid option. Please try again.")
         else:
             print(f"Option {choice} selected.")
@@ -109,7 +119,7 @@ if __name__ == "__main__":
     if mode == "1":
         # Ejecutar servidor FastAPI
         import uvicorn
-        uvicorn.run(app, host="127.0.0.1", port=8000)
+        uvicorn.run(app, host="127.0.0.1", port=8003)
     elif mode == "2":
         # Ejecutar menú interactivo
         menu_handler()
