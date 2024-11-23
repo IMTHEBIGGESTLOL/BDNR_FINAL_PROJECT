@@ -1,5 +1,7 @@
 from datetime import datetime
 import json
+import uuid
+
 
 import pydgraph
 
@@ -57,101 +59,114 @@ def set_schema(client):
 import uuid
 from datetime import datetime
 
+import uuid
+from datetime import datetime
+
 def create_data(client):
-    # Create a new transaction.
+    # Create a new transaction
     txn = client.txn()
     try:
-        p = [
-            # Users (Pet Wellness Project)
+        data = [
+            # Users
             {
-                'uid': f'_:user{1}',
+                'uid': f'_:user1',
                 'dgraph.type': 'User',
                 'user_id': str(uuid.uuid4()),
                 'username': 'petlover1',
                 'email': 'petlover1@example.com',
-                'role': 'user'
+                'role': 'customer',
+                'created_tickets': [{'uid': f'_:ticket1'}]
             },
             {
-                'uid': f'_:user{2}',
+                'uid': f'_:user2',
+                'dgraph.type': 'User',
+                'user_id': str(uuid.uuid4()),
+                'username': 'agent1',
+                'email': 'agent1@example.com',
+                'role': 'agent',
+                'assigned_tickets': [{'uid': f'_:ticket1'}]
+            },
+            {
+                'uid': f'_:user3',
                 'dgraph.type': 'User',
                 'user_id': str(uuid.uuid4()),
                 'username': 'petlover2',
                 'email': 'petlover2@example.com',
-                'role': 'agent'
+                'role': 'customer',
+                'created_tickets': [{'uid': f'_:ticket2'}]
             },
             {
-                'uid': f'_:user{3}',
+                'uid': f'_:user4',
                 'dgraph.type': 'User',
                 'user_id': str(uuid.uuid4()),
-                'username': 'vet1',
-                'email': 'vet1@example.com',
-                'role': 'agent'
+                'username': 'agent2',
+                'email': 'agent2@example.com',
+                'role': 'agent',
+                'assigned_tickets': [{'uid': f'_:ticket2'}]
             },
             {
-                'uid': f'_:user{4}',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'trainer1',
-                'email': 'trainer1@example.com',
-                'role': 'user'
-            },
-            {
-                'uid': f'_:user{5}',
+                'uid': f'_:user5',
                 'dgraph.type': 'User',
                 'user_id': str(uuid.uuid4()),
                 'username': 'admin1',
                 'email': 'admin1@example.com',
-                'role': 'agent'
+                'role': 'admin'
+            },
+
+            # Tickets
+            {
+                'uid': f'_:ticket1',
+                'dgraph.type': 'Ticket',
+                'ticket_id': str(uuid.uuid4()),
+                'status': 'open',
+                'priority': 'high',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+                'customer_id': 'user1',
+                'assigned_agent_id': 'user2',
+                'assigned_to': {'uid': f'_:user2'}
             },
             {
-                'uid': f'_:user{6}',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'petlover3',
-                'email': 'petlover3@example.com',
-                'role': 'user'
+                'uid': f'_:ticket2',
+                'dgraph.type': 'Ticket',
+                'ticket_id': str(uuid.uuid4()),
+                'status': 'closed',
+                'priority': 'medium',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+                'customer_id': 'user3',
+                'assigned_agent_id': 'user4',
+                'assigned_to': {'uid': f'_:user4'}
+            },
+            # Additional tickets...
+            # Messages
+            {
+                'uid': f'_:message1',
+                'dgraph.type': 'Message',
+                'message_id': str(uuid.uuid4()),
+                'sender_id': 'user1',
+                'message_text': 'Need help with my pet\'s health.',
+                'timestamp': datetime.now().isoformat(),
+                'belongs_to_ticket': {'uid': f'_:ticket1'}
             },
             {
-                'uid': f'_:user{7}',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'vet2',
-                'email': 'vet2@example.com',
-                'role': 'agent'
+                'uid': f'_:message2',
+                'dgraph.type': 'Message',
+                'message_id': str(uuid.uuid4()),
+                'sender_id': 'user2',
+                'message_text': 'Your ticket has been assigned.',
+                'timestamp': datetime.now().isoformat(),
+                'belongs_to_ticket': {'uid': f'_:ticket1'}
             },
-            {
-                'uid': f'_:user{8}',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'trainer2',
-                'email': 'trainer2@example.com',
-                'role': 'user'
-            },
-            {
-                'uid': f'_:user{9}',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'admin2',
-                'email': 'admin2@example.com',
-                'role': 'agent'
-            },
-            {
-                'uid': f'_:user{10}',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'petlover4',
-                'email': 'petlover4@example.com',
-                'role': 'user'
-            }
+            # Additional messages...
         ]
 
         # Mutate the data
-        response = txn.mutate(set_obj=p)
+        response = txn.mutate(set_obj=data)
 
-        # Commit the transaction.
+        # Commit the transaction
         commit_response = txn.commit()
         print(f"Commit Response: {commit_response}")
         print(f"UIDs: {response.uids}")
     finally:
-        # Clean up. Calling this after txn.commit() is a no-op and hence safe.
         txn.discard()

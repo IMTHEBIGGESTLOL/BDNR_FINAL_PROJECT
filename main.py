@@ -21,6 +21,11 @@ DB_NAME = os.getenv('MONGODB_DB_NAME', 'final_project')
 dgraph_client_stub = pydgraph.DgraphClientStub(DGRAPH_URI)
 dgraph_client = pydgraph.DgraphClient(dgraph_client_stub)
 
+cassandra_cluster = Cluster(CLUSTER_IPS.split(','))
+cassandra_session = cassandra_cluster.connect()
+model.create_keyspace(cassandra_session, KEYSPACE, REPLICATION_FACTOR)
+cassandra_session.set_keyspace(KEYSPACE)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Initializing databases...")
@@ -70,14 +75,15 @@ app.include_router(db_router, tags=["project"], prefix="/project")
 # Menú interactivo
 def print_menu():
     menu_options = {
-        1: "Create data",
-        2: "Search user",
-        3: "Delete",
-        4: "Search Channel",
-        5: "Advanced Queries (Pagination, Count)",
-        6: "Drop All",
-        7: "Insert Bulk Data into Databases",  # New option to insert bulk data
-        8: "Exit",
+        # 1: "Create data",
+        # 2: "Search user",
+        # 3: "Delete",
+        # 4: "Search Channel",
+        # 5: "Advanced Queries (Pagination, Count)",
+        # 6: "Drop All",
+        1: "Insert Bulk Data into Databases",  # option to insert bulk data
+        2: "Login",
+        3: "Exit",
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -94,14 +100,16 @@ def menu_handler():
             print("Invalid input. Please enter a number.")
             continue
 
-        if choice == 8:  # Exit
+        if choice == 3:  # Exit
             print("Exiting...")
             break
 
-        if choice == 7:  # Insert bulk data
+        if choice == 1:  # Insert bulk data
             print("Inserting bulk data into MongoDB, Cassandra, and Dgraph...")
             #insert dgraph 
             modeldgraph.create_data(dgraph_client)
+            #insert Cassandra
+            model.bulk_insert(cassandra_session)
             print("Data inserted successfully.")
         
         if choice not in range(1, 9):
