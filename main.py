@@ -90,7 +90,19 @@ def print_menu():
 
 def print_customer_menu():
     menu_options = {
-        1: "See my tickets"
+        1: "See my tickets",
+        2: "Log Out"
+    }
+    for key, value in menu_options.items():
+        print(f"{key} -- {value}")
+
+def print_agent_menu():
+    menu_options = {
+        1: "See my assigned tickets",
+        2: "See my feedback per ticket",
+        3: "See escalation per ticket",
+        4: "See activities per ticket",
+        5: "Log Out"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -124,11 +136,47 @@ def menu_handler():
                 print(type(customer_id))
                 print(f"Welcome {user}")
                 #pint customer menu
-                print_customer_menu()
-                choice_2 = int(input("Select an option: "))
-                if choice_2 == 1:
-                    #cassandra call to tickets_by_customer
-                    model.get_user_tickets(cassandra_session, customer_id)
+                while True:
+                    print_customer_menu()
+                    choice_2 = int(input("Select an option: "))
+                    if choice_2 == 1:
+                        #cassandra call to tickets_by_customer
+                        model.get_user_tickets(cassandra_session, customer_id)
+                    if choice_2 == 2:
+                        print("Logging out")
+                        break
+            if role == 'agent':
+                agent_id = user_data[0]['agent_id']
+                agent_id = int(agent_id)
+                print(f"Welcome agent {user}")
+                while True:
+                    print_agent_menu()
+                    choice_2 = int(input("Select an option: "))
+                    if choice_2 == 1:
+                        model.get_tickets_by_agent_date(cassandra_session, agent_id)
+                    elif choice_2 == 2:
+                        model.get_feedback_by_agent(cassandra_session, agent_id)
+                    elif choice_2 == 3:
+                        print("this are your tickets: \n")
+                        model.get_tickets_by_agent_date(cassandra_session, agent_id)
+                        ticket_id = int(input("Insert ticket id you want to search: "))
+                        model.get_escalations_by_ticket(cassandra_session, ticket_id, agent_id)
+                    elif choice_2 == 3:
+                        print("this are your tickets: \n")
+                        model.get_tickets_by_agent_date(cassandra_session, agent_id)
+                        ticket_id = int(input("Insert ticket id you want to search: "))
+                        model.get_escalations_by_ticket(cassandra_session, ticket_id, agent_id)
+                    elif choice_2 == 4:
+                        print("this are your tickets: \n")
+                        model.get_tickets_by_agent_date(cassandra_session, agent_id)
+                        ticket_id = int(input("Insert ticket id you want to search: "))
+                        model.get_activities_by_ticket(cassandra_session, ticket_id, agent_id)
+                    elif choice_2 == 5:
+                        print("Logging out...")
+                        break
+
+            if role == 'admin':
+                print(f"Welcome allmighty {user}")
             #get_cassandra_username
                 #Cassandra uses sequencial username id
             #Mongo_db username
@@ -140,16 +188,13 @@ def menu_handler():
         if choice == 1:  # Insert bulk data
             print("Inserting bulk data into MongoDB, Cassandra, and Dgraph...")
             #insert dgraph 
-            modeldgraph.create_data(dgraph_client)
+            #modeldgraph.create_data(dgraph_client)
             #insert Cassandra
-            model.bulk_insert(cassandra_session)
+            model.bulk_insert(cassandra_session, dgraph_client)
             print("Data inserted successfully.")
         
         if choice not in range(1, 9):
             print("Invalid option. Please try again.")
-        else:
-            print(f"Option {choice} selected.")
-            # Aquí se puede implementar lógica específica para cada opción
 
 if __name__ == "__main__":
     print("Choose a mode to run:")

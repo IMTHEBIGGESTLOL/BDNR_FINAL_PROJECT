@@ -14,6 +14,7 @@ def set_schema(client):
         assigned_tickets
         created_tickets
         customer_id
+        agent_id
     }
 
     type Ticket {
@@ -44,6 +45,7 @@ def set_schema(client):
     created_at: datetime @index(hour) .
     updated_at: datetime @index(hour) .
     customer_id: string @index(exact) .
+    agent_id: string @index(exact) .
     
     message_id: string @index(exact) .
     sender: uid .
@@ -64,114 +66,22 @@ from datetime import datetime
 import uuid
 from datetime import datetime
 
-def create_data(client):
-    # Create a new transaction
+def create_data(client, ticket_data, agent_ids, customer_ids):
     txn = client.txn()
     try:
+        # Dgraph user data
         data = [
-            # Users
-            {
-                'uid': f'_:user1',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'petlover1',
-                'email': 'petlover1@example.com',
-                'role': 'customer',
-                'customer_id': 1,
-                'created_tickets': [{'uid': f'_:ticket1'}]
-            },
-            {
-                'uid': f'_:user2',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'agent1',
-                'email': 'agent1@example.com',
-                'role': 'agent',
-                'assigned_tickets': [{'uid': f'_:ticket1'}]
-            },
-            {
-                'uid': f'_:user3',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'petlover2',
-                'email': 'petlover2@example.com',
-                'role': 'customer',
-                'customer_id': 2,
-                'created_tickets': [{'uid': f'_:ticket2'}]
-            },
-            {
-                'uid': f'_:user4',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'agent2',
-                'email': 'agent2@example.com',
-                'role': 'agent',
-                'assigned_tickets': [{'uid': f'_:ticket2'}]
-            },
-            {
-                'uid': f'_:user5',
-                'dgraph.type': 'User',
-                'user_id': str(uuid.uuid4()),
-                'username': 'admin1',
-                'email': 'admin1@example.com',
-                'role': 'admin'
-            },
+            {'uid': f'_:agent1', 'dgraph.type': 'User', 'username': 'agent1', 'role': 'agent', 'agent_id': agent_ids[0]},
+            {'uid': f'_:agent2', 'dgraph.type': 'User', 'username': 'agent2', 'role': 'agent', 'agent_id': agent_ids[1]},
+            {'uid': f'_:customer1', 'dgraph.type': 'User', 'username': 'petlover1', 'role': 'customer', 'customer_id': customer_ids[0]},
+            {'uid': f'_:customer2', 'dgraph.type': 'User', 'username': 'petlover2', 'role': 'customer', 'customer_id': customer_ids[1]},
+            {'uid': f'_:admin1', 'dgraph.type': 'User', 'username': 'admin1', 'role': 'admin', 'admin_id': 1},
+        ] + ticket_data
 
-            # Tickets
-            {
-                'uid': f'_:ticket1',
-                'dgraph.type': 'Ticket',
-                'ticket_id': str(uuid.uuid4()),
-                'status': 'open',
-                'priority': 'high',
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat(),
-                'customer_id': 'user1',
-                'assigned_agent_id': 'user2',
-                'assigned_to': {'uid': f'_:user2'}
-            },
-            {
-                'uid': f'_:ticket2',
-                'dgraph.type': 'Ticket',
-                'ticket_id': str(uuid.uuid4()),
-                'status': 'closed',
-                'priority': 'medium',
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat(),
-                'customer_id': 'user3',
-                'assigned_agent_id': 'user4',
-                'assigned_to': {'uid': f'_:user4'}
-            },
-            # Additional tickets...
-            # Messages
-            {
-                'uid': f'_:message1',
-                'dgraph.type': 'Message',
-                'message_id': str(uuid.uuid4()),
-                'sender_id': 'user1',
-                'message_text': 'Need help with my pet\'s health.',
-                'timestamp': datetime.now().isoformat(),
-                'belongs_to_ticket': {'uid': f'_:ticket1'}
-            },
-            {
-                'uid': f'_:message2',
-                'dgraph.type': 'Message',
-                'message_id': str(uuid.uuid4()),
-                'sender_id': 'user2',
-                'message_text': 'Your ticket has been assigned.',
-                'timestamp': datetime.now().isoformat(),
-                'belongs_to_ticket': {'uid': f'_:ticket1'}
-            },
-            # Additional messages...
-        ]
-
-        # Mutate the data
-        response = txn.mutate(set_obj=data)
-
-        # Commit the transaction
-        commit_response = txn.commit()
-        print(f"Commit Response: {commit_response}")
-        print(f"UIDs: {response.uids}")
+        # Mutate and commit
+        txn.mutate(set_obj=data)
+        txn.commit()
+        print("Dgraph data insertion complete!")
     finally:
         txn.discard()
 
@@ -183,6 +93,7 @@ def search_user(client, username): #QUERY DE STRING AND INCLUDES 2 NODES
             email
             role
             customer_id
+            agent_id
         }
     }"""
 
@@ -192,3 +103,24 @@ def search_user(client, username): #QUERY DE STRING AND INCLUDES 2 NODES
 
     # return results.
     return ppl['all']
+
+def search_messages_by_keyword(client, keyword):
+    query = """
+    query search_messages($a: string) {
+        all_messages(func: anyoftext(message_text, $a)) {
+            message_id
+            sender_id
+            message_text
+            timestamp
+            belongs_to_ticket {
+                ticket_id
+                status
+            }
+        }
+    }"""
+    variables = {'$a': keyword}
+    res = client.txn(read_only=True).query(query, variables=variables)
+    messages = json.loads(res.json)
+
+    # Print results
+    print(f"Messages containing '{keyword}':\n{json.dumps(messages, indent=2)}")

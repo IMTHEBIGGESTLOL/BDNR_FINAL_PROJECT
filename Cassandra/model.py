@@ -3,7 +3,8 @@ import uuid
 
 import time_uuid
 from cassandra.query import BatchStatement
-from datetime import datetime
+from datetime import datetime, timedelta
+from DGraph import modeldgraph
 
 CREATE_KEYSPACE = """
         CREATE KEYSPACE IF NOT EXISTS {}
@@ -39,8 +40,8 @@ CREATE_ACTIVITY_BY_TICKET_TABLE = """
         activity_type TEXT,
         status TEXT,
         agent_id INT,
-        PRIMARY KEY ((ticket_id), activity_timestamp)
-    ) WITH CLUSTERING ORDER BY (activity_timestamp ASC);
+        PRIMARY KEY ((ticket_id), agent_id, activity_timestamp)
+    ) WITH CLUSTERING ORDER BY (agent_id ASC, activity_timestamp ASC);
 """
 
 CREATE_TICKETS_BY_AGENT_DATE_TABLE = """
@@ -94,8 +95,8 @@ CREATE_ESCALATION_BY_TICKET_TABLE = """
         escalation_level TEXT,
         agent_id INT,
         comments TEXT,
-        PRIMARY KEY ((ticket_id), escalation_timestamp)
-    ) WITH CLUSTERING ORDER BY (escalation_timestamp ASC);
+        PRIMARY KEY ((ticket_id), agent_id, escalation_timestamp)
+    ) WITH CLUSTERING ORDER BY (agent_id ASC, escalation_timestamp ASC);
 """
 
 CREATE_TICKET_COUNT_BY_CHANNEL_DATE_TABLE = """
@@ -115,6 +116,67 @@ SELECT_TICKETS_BY_CUSTOMER = """
     ORDER BY created_timestamp ASC
 """
 
+SELECT_TICKETS_BY_DATE = """
+    SELECT ticket_id, created_timestamp, customer_id, description, status
+    FROM ticket_by_date
+    WHERE created_date = ?
+    ORDER BY created_timestamp ASC
+"""
+
+SELECT_ACTIVITIES_BY_TICKET = """
+    SELECT activity_timestamp, activity_type, status, agent_id, ticket_id
+    FROM activity_by_ticket
+    WHERE ticket_id = ?
+    AND agent_id = ?
+    ORDER BY activity_timestamp ASC
+"""
+
+SELECT_TICKETS_BY_AGENT_DATE = """
+    SELECT assigned_date, ticket_id, priority, status, agent_id
+    FROM tickets_by_agent_date
+    WHERE agent_id = ?
+    ORDER BY ticket_id ASC
+"""
+
+SELECT_FEEDBACK_BY_AGENT = """
+    SELECT ticket_id, feedback_rating, feedback_comments, agent_id
+    FROM feedback_by_agent
+    WHERE agent_id = ?
+    ORDER BY ticket_id ASC
+"""
+
+SELECT_URGENT_TICKETS_BY_TIME = """
+    SELECT ticket_id, created_timestamp, customer_id, description, agent_id
+    FROM urgent_tickets_by_time
+    WHERE priority_level = 'urgent'
+    AND created_timestamp < maxTimeuuid(?)
+    AND created_timestamp > minTimeuuid(?)
+    ORDER BY created_timestamp ASC
+"""
+#FOR ADMIN
+SELECT_ESCALATIONS_BY_TICKET_ADMIN = """
+    SELECT escalation_timestamp, escalation_level, agent_id, comments
+    FROM escalation_by_ticket
+    WHERE ticket_id = ?
+    ORDER BY escalation_timestamp ASC
+"""
+#FOR AGENTS
+SELECT_ESCALATIONS_BY_TICKET_AGENT = """
+    SELECT escalation_timestamp, escalation_level, agent_id, comments, ticket_id
+    FROM escalation_by_ticket
+    WHERE ticket_id = ?
+    AND agent_id = ?
+    ORDER BY escalation_timestamp ASC
+"""
+
+SELECT_TICKET_COUNT_BY_CHANNEL_DATE = """
+    SELECT support_channel, ticket_count, ticket_id
+    FROM ticket_count_by_channel_date
+    WHERE created_date = ?
+    ORDER BY support_channel ASC, ticket_id ASC
+"""
+
+
 def create_keyspace(session, keyspace, replication_factor):
     session.execute(CREATE_KEYSPACE.format(keyspace, replication_factor))
 
@@ -128,8 +190,8 @@ def create_schema(session):
     session.execute(CREATE_ESCALATION_BY_TICKET_TABLE)
     session.execute(CREATE_TICKET_COUNT_BY_CHANNEL_DATE_TABLE)
 
-def bulk_insert(session):
-    # Prepare the insert statements for all the tables
+def bulk_insert(session, dgraph_client):
+    # Prepare the insert statements for Cassandra
     ticket_by_date_stmt = session.prepare("INSERT INTO ticket_by_date (created_date, created_timestamp, ticket_id, customer_id, description, status) VALUES (?, ?, ?, ?, ?, ?)")
     activity_by_ticket_stmt = session.prepare("INSERT INTO activity_by_ticket (ticket_id, activity_timestamp, activity_type, status, agent_id) VALUES (?, ?, ?, ?, ?)")
     tickets_by_agent_date_stmt = session.prepare("INSERT INTO tickets_by_agent_date (agent_id, assigned_date, ticket_id, priority, status) VALUES (?, ?, ?, ?, ?)")
@@ -138,88 +200,64 @@ def bulk_insert(session):
     tickets_by_customer_stmt = session.prepare("INSERT INTO tickets_by_customer (customer_id, ticket_id, created_timestamp, status, priority) VALUES (?, ?, ?, ?, ?)")
     escalation_by_ticket_stmt = session.prepare("INSERT INTO escalation_by_ticket (ticket_id, escalation_timestamp, escalation_level, agent_id, comments) VALUES (?, ?, ?, ?, ?)")
     ticket_count_by_channel_date_stmt = session.prepare("INSERT INTO ticket_count_by_channel_date (created_date, support_channel, ticket_count, ticket_id) VALUES (?, ?, ?, ?)")
-    
-    # Prepare the data
+
+    # Data generation
     ticket_ids = [i for i in range(1, 11)]
     agent_ids = [i for i in range(1, 3)]
-    customer_ids = [i for i in range(0, 2)]
+    customer_ids = [i for i in range(1, 3)]
     support_channels = ['phone', 'email', 'chat']
     statuses = ['open', 'resolved', 'in_progress']
     priorities = ['high', 'medium', 'low']
     feedback_ratings = [1, 2, 3, 4, 5]
     escalation_levels = ['level_1', 'level_2', 'level_3']
 
-    # Batch for the inserts
     batch = BatchStatement()
-
-    # 1. ticket_by_date (Retrieve all tickets created on a specific day, sorted by time)
-    for ticket_id in ticket_ids:
+    
+    ticket_data = []
+    for i, ticket_id in enumerate(ticket_ids):
+        customer_id = random.choice(customer_ids)
+        agent_id = random.choice(agent_ids)
         created_date = datetime.now().date()
-        created_timestamp = datetime.now()
-        customer_id = random.choice(customer_ids)
-        description = "Ticket description"
+        created_timestamp = datetime.now() + timedelta(seconds=i) #all are unique
+        escalation_timestamp = datetime.now() + timedelta(seconds=i)
+        description = f"Ticket {i+1} description"
         status = random.choice(statuses)
-        batch.add(ticket_by_date_stmt, (created_date, created_timestamp, ticket_id, customer_id, description, status))
-    
-    # 2. activity_by_ticket (Fetch all activities for a specific ticket, sorted by timestamp)
-    for ticket_id in ticket_ids:
-        activity_timestamp = datetime.now()
-        activity_type = random.choice(['status_update', 'comment', 'escalation'])
-        status = random.choice(statuses)
-        agent_id = random.choice(agent_ids)
-        batch.add(activity_by_ticket_stmt, (ticket_id, activity_timestamp, activity_type, status, agent_id))
-    
-    # 3. tickets_by_agent_date (List of all tickets assigned to a particular agent on a specific date)
-    for agent_id in agent_ids:
-        for ticket_id in ticket_ids:
-            assigned_date = datetime.now().date()
-            priority = random.choice(priorities)
-            status = random.choice(statuses)
-            batch.add(tickets_by_agent_date_stmt, (agent_id, assigned_date, ticket_id, priority, status))
-    
-    # 4. feedback_by_agent (Get feedback for all tickets resolved by a specific agent)
-    for agent_id in agent_ids:
-        for ticket_id in ticket_ids:
-            feedback_rating = random.choice(feedback_ratings)
-            feedback_comments = f"Feedback for {ticket_id}"
-            batch.add(feedback_by_agent_stmt, (agent_id, ticket_id, feedback_rating, feedback_comments))
-    
-    # 5. urgent_tickets_by_time (Retrieve all urgent tickets created within a specific time range)
-    for ticket_id in ticket_ids:
-        created_timestamp = datetime.now()
-        customer_id = random.choice(customer_ids)
-        description = f"Urgent ticket description for {ticket_id}"
-        agent_id = random.choice(agent_ids)
-        batch.add(urgent_tickets_by_time_stmt, ('urgent', created_timestamp, ticket_id, customer_id, description, agent_id))
-    
-    # 6. tickets_by_customer (Retrieve all tickets created by a specific customer)
-    for customer_id in customer_ids:
-        for ticket_id in ticket_ids:
-            created_timestamp = datetime.now()
-            status = random.choice(statuses)
-            priority = random.choice(priorities)
-            batch.add(tickets_by_customer_stmt, (customer_id, ticket_id, created_timestamp, status, priority))
-    
-    # 7. escalation_by_ticket (Track escalations over time for a specific ticket)
-    for ticket_id in ticket_ids:
-        escalation_timestamp = datetime.now()
+        priority = random.choice(priorities)
+        feedback_rating = random.choice(feedback_ratings)
         escalation_level = random.choice(escalation_levels)
-        agent_id = random.choice(agent_ids)
-        comments = f"Escalation details for {ticket_id}"
-        batch.add(escalation_by_ticket_stmt, (ticket_id, escalation_timestamp, escalation_level, agent_id, comments))
-    
-    # 8. ticket_count_by_channel_date (Generate a report of ticket count per channel for a specific day)
-    for ticket_id in ticket_ids:
-        created_date = datetime.now().date()
         support_channel = random.choice(support_channels)
-        ticket_count = 1
-        batch.add(ticket_count_by_channel_date_stmt, (created_date, support_channel, ticket_count, ticket_id))
+
+        # Insert into Cassandra
+        batch.add(ticket_by_date_stmt, (created_date, created_timestamp, ticket_id, customer_id, description, status))
+        batch.add(tickets_by_agent_date_stmt, (agent_id, created_date, ticket_id, priority, status))
+        batch.add(tickets_by_customer_stmt, (customer_id, ticket_id, created_timestamp, status, priority))
+        batch.add(activity_by_ticket_stmt, (ticket_id, created_timestamp, "created", status, agent_id))
+        batch.add(feedback_by_agent_stmt, (agent_id, ticket_id, feedback_rating, "Comments", ))
+        batch.add(urgent_tickets_by_time_stmt, (priority, created_timestamp, ticket_id, customer_id, "description", agent_id))
+        batch.add(escalation_by_ticket_stmt, (ticket_id, escalation_timestamp, escalation_level, agent_id, "Comments"))
+        batch.add(ticket_count_by_channel_date_stmt, (created_timestamp, support_channel, i, ticket_id))
+
+        # Collect data for Dgraph
+        ticket_data.append({
+            'uid': f'_:ticket{i+1}',
+            'dgraph.type': 'Ticket',
+            'ticket_id': ticket_id,
+            'status': status,
+            'priority': priority,
+            'created_at': created_timestamp.isoformat(),
+            'assigned_to': {'uid': f'_:agent{agent_ids.index(agent_id)+1}'},
+            'created_by': {'uid': f'_:customer{customer_ids.index(customer_id)+1}'}
+        })
     
     # Execute the batch
     session.execute(batch)
-
+    
+    # Insert data into Dgraph
+    modeldgraph.create_data(dgraph_client, ticket_data, agent_ids, customer_ids)
     print("Bulk insert complete!")
 
+
+#User the Tickets by Customer table, for usage on admin and customer
 def get_user_tickets(session, customer_id):
     stmt = session.prepare(SELECT_TICKETS_BY_CUSTOMER)
     rows = session.execute(stmt, [customer_id])
@@ -233,3 +271,84 @@ def get_user_tickets(session, customer_id):
     print("\n")
     input("Press any key to continue...")
     print("\n")
+
+# 1. Retrieve Tickets by Date
+def get_tickets_by_date(session, created_date):
+    stmt = session.prepare(SELECT_TICKETS_BY_DATE)
+    rows = session.execute(stmt, [created_date])
+    return rows
+
+# 2. Fetch Activities for a Ticket
+def get_activities_by_ticket(session, ticket_id, agent_id):
+    stmt = session.prepare(SELECT_ACTIVITIES_BY_TICKET)
+    rows = session.execute(stmt, [ticket_id, agent_id])
+    print("\n")
+    for row in rows:
+        print(f"=== agent_id: {row.agent_id} ===")
+        print(f"- Ticket_id: {row.ticket_id}")
+        print(f"Update date: {row.activity_timestamp}")
+        print(f"status: {row.status}")
+        print(f"Type: {row.activity_type}")
+        print("\n")
+    print("\n")
+    input("Press any key to continue...")
+    print("\n")
+
+# 3. List Tickets Assigned to Agent by Date
+def get_tickets_by_agent_date(session, agent_id):
+    stmt = session.prepare(SELECT_TICKETS_BY_AGENT_DATE)
+    rows = session.execute(stmt, [agent_id])
+    print("\n")
+    for row in rows:
+        print(f"=== agent_id: {row.agent_id} ===")
+        print(f"- Ticket_id: {row.ticket_id}")
+        print(f"assigned date: {row.assigned_date}")
+        print(f"status: {row.status}")
+        print(f"priority: {row.priority}")
+        print("\n")
+    print("\n")
+    input("Press any key to continue...")
+    print("\n")
+
+# 4. Fetch Agent’s Ticket Feedback
+def get_feedback_by_agent(session, agent_id):
+    stmt = session.prepare(SELECT_FEEDBACK_BY_AGENT)
+    rows = session.execute(stmt, [agent_id])
+    print("\n")
+    for row in rows:
+        print(f"=== agent_id: {row.agent_id} ===")
+        print(f"- Ticket_id: {row.ticket_id}")
+        print(f" Comments: {row.feedback_comments}")
+        print(f"Rating : {row.feedback_rating}")
+        print("\n")
+    print("\n")
+    input("Press any key to continue...")
+    print("\n")
+
+# 5. Retrieve Urgent Tickets by Time Range
+def get_urgent_tickets_by_time(session, start_time, end_time):
+    stmt = session.prepare(SELECT_URGENT_TICKETS_BY_TIME)
+    rows = session.execute(stmt, [end_time, start_time])
+    return rows
+
+# 7. Track Escalations for a Ticket
+def get_escalations_by_ticket(session, ticket_id, agent_id):
+    stmt = session.prepare(SELECT_ESCALATIONS_BY_TICKET_AGENT)
+    rows = session.execute(stmt, [ticket_id, agent_id])
+    print("\n")
+    for row in rows:
+        print(f"=== agent_id: {row.agent_id} ===")
+        print(f"- Ticket_id: {row.ticket_id}")
+        print(f"Escalation date: {row.escalation_timestamp}")
+        print(f"Comments: {row.comments}")
+        print(f"Level of escalation: {row.escalation_level}")
+        print("\n")
+    print("\n")
+    input("Press any key to continue...")
+    print("\n")
+
+# 8. Generate Daily Channel Report
+def get_daily_channel_report(session, created_date):
+    stmt = session.prepare(SELECT_TICKET_COUNT_BY_CHANNEL_DATE)
+    rows = session.execute(stmt, [created_date])
+    return rows
