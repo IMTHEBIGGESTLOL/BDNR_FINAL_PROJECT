@@ -88,6 +88,13 @@ def print_menu():
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
 
+def print_customer_menu():
+    menu_options = {
+        1: "See my tickets"
+    }
+    for key, value in menu_options.items():
+        print(f"{key} -- {value}")
+
 def menu_handler():
     """
     Muestra un menú interactivo y maneja las opciones seleccionadas.
@@ -99,6 +106,32 @@ def menu_handler():
         except ValueError:
             print("Invalid input. Please enter a number.")
             continue
+
+        if choice == 2:
+            print("Insert your credentials")
+            user = input("Username: ")
+            #get_dgraph_username
+                #DGraph uses the same username
+            user_data = modeldgraph.search_user(dgraph_client, user)
+            if not user_data:
+                print("wrong credentials \n Exiting...")
+                break
+            print(user_data)
+            role = user_data[0]['role']
+            if role == 'customer':
+                customer_id = user_data[0]['customer_id']
+                customer_id = int(customer_id)
+                print(type(customer_id))
+                print(f"Welcome {user}")
+                #pint customer menu
+                print_customer_menu()
+                choice_2 = int(input("Select an option: "))
+                if choice_2 == 1:
+                    #cassandra call to tickets_by_customer
+                    model.get_user_tickets(cassandra_session, customer_id)
+            #get_cassandra_username
+                #Cassandra uses sequencial username id
+            #Mongo_db username
 
         if choice == 3:  # Exit
             print("Exiting...")

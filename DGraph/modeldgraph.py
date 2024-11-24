@@ -13,6 +13,7 @@ def set_schema(client):
         role
         assigned_tickets
         created_tickets
+        customer_id
     }
 
     type Ticket {
@@ -42,6 +43,7 @@ def set_schema(client):
     priority: string @index(term) .
     created_at: datetime @index(hour) .
     updated_at: datetime @index(hour) .
+    customer_id: string @index(exact) .
     
     message_id: string @index(exact) .
     sender: uid .
@@ -75,6 +77,7 @@ def create_data(client):
                 'username': 'petlover1',
                 'email': 'petlover1@example.com',
                 'role': 'customer',
+                'customer_id': 1,
                 'created_tickets': [{'uid': f'_:ticket1'}]
             },
             {
@@ -93,6 +96,7 @@ def create_data(client):
                 'username': 'petlover2',
                 'email': 'petlover2@example.com',
                 'role': 'customer',
+                'customer_id': 2,
                 'created_tickets': [{'uid': f'_:ticket2'}]
             },
             {
@@ -170,3 +174,21 @@ def create_data(client):
         print(f"UIDs: {response.uids}")
     finally:
         txn.discard()
+
+
+def search_user(client, username): #QUERY DE STRING AND INCLUDES 2 NODES
+    query = """query search_person($a: string) {
+        all(func: eq(username, $a)) {
+            username
+            email
+            role
+            customer_id
+        }
+    }"""
+
+    variables = {'$a': username}
+    res = client.txn(read_only=True).query(query, variables=variables)
+    ppl = json.loads(res.json)
+
+    # return results.
+    return ppl['all']
