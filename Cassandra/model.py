@@ -66,15 +66,15 @@ CREATE_FEEDBACK_BY_AGENT_TABLE = """
 """
 
 CREATE_URGENT_TICKETS_BY_TIME_TABLE = """
-    CREATE TABLE IF NOT EXISTS urgent_tickets_by_time (
+    CREATE TABLE urgent_tickets_by_time (
         priority_level TEXT,
-        created_timestamp TIMESTAMP,
+        created_timestamp DATE,
         ticket_id INT,
         customer_id INT,
         description TEXT,
         agent_id INT,
-        PRIMARY KEY ((priority_level), created_timestamp)
-    ) WITH CLUSTERING ORDER BY (created_timestamp ASC);
+        PRIMARY KEY (priority_level, created_timestamp, ticket_id)
+    );
 """
 
 CREATE_TICKETS_BY_CUSTOMER_TABLE = """
@@ -148,9 +148,9 @@ SELECT_FEEDBACK_BY_AGENT = """
 SELECT_URGENT_TICKETS_BY_TIME = """
     SELECT ticket_id, created_timestamp, customer_id, description, agent_id
     FROM urgent_tickets_by_time
-    WHERE priority_level = 'urgent'
-    AND created_timestamp < maxTimeuuid(?)
-    AND created_timestamp > minTimeuuid(?)
+    WHERE priority_level = 'high'
+    AND created_timestamp <= ?
+    AND created_timestamp >= ?
     ORDER BY created_timestamp ASC
 """
 #FOR ADMIN
@@ -173,9 +173,9 @@ SELECT_TICKET_COUNT_BY_CHANNEL_DATE = """
     SELECT support_channel, ticket_count, ticket_id
     FROM ticket_count_by_channel_date
     WHERE created_date = ?
+    AND support_channel = ?
     ORDER BY support_channel ASC, ticket_id ASC
 """
-
 
 def create_keyspace(session, keyspace, replication_factor):
     session.execute(CREATE_KEYSPACE.format(keyspace, replication_factor))
@@ -246,7 +246,8 @@ def bulk_insert(session, dgraph_client):
             'priority': priority,
             'created_at': created_timestamp.isoformat(),
             'assigned_to': {'uid': f'_:agent{agent_ids.index(agent_id)+1}'},
-            'created_by': {'uid': f'_:customer{customer_ids.index(customer_id)+1}'}
+            'created_by': {'uid': f'_:customer{customer_ids.index(customer_id)+1}'},
+            'messages': [{'uid': f'_:message{i}', 'dgraph.type': 'Message', 'sender': { 'uid' : f'_:customer{customer_ids.index(customer_id)+1}'}, 'message_text': 'text', 'belongs_to': {'uid': f'_:ticket{i+1}'}},]
         })
     
     # Execute the batch
@@ -276,7 +277,17 @@ def get_user_tickets(session, customer_id):
 def get_tickets_by_date(session, created_date):
     stmt = session.prepare(SELECT_TICKETS_BY_DATE)
     rows = session.execute(stmt, [created_date])
-    return rows
+    print("\n")
+    for row in rows:
+        print(f"=== Customer_id: {row.customer_id} ===")
+        print(f"- Ticket_id: {row.ticket_id}")
+        print(f"created on: {row.created_timestamp}")
+        print(f"status: {row.status}")
+        print(f"Description: {row.description}")
+    print("\n")
+    input("Press any key to continue...")
+    print("\n")
+
 
 # 2. Fetch Activities for a Ticket
 def get_activities_by_ticket(session, ticket_id, agent_id):
@@ -329,7 +340,17 @@ def get_feedback_by_agent(session, agent_id):
 def get_urgent_tickets_by_time(session, start_time, end_time):
     stmt = session.prepare(SELECT_URGENT_TICKETS_BY_TIME)
     rows = session.execute(stmt, [end_time, start_time])
-    return rows
+    print("\n")
+    for row in rows:
+        print(f"=== agent_id: {row.agent_id} ===")
+        print(f"- Ticket_id: {row.ticket_id}")
+        print(f" Description: {row.description}")
+        print(f"Customer_id : {row.customer_id}")
+        print(f"Created on: {row.created_timestamp}")
+        print("\n")
+    print("\n")
+    input("Press any key to continue...")
+    print("\n")
 
 # 7. Track Escalations for a Ticket
 def get_escalations_by_ticket(session, ticket_id, agent_id):
@@ -348,7 +369,15 @@ def get_escalations_by_ticket(session, ticket_id, agent_id):
     print("\n")
 
 # 8. Generate Daily Channel Report
-def get_daily_channel_report(session, created_date):
+def get_daily_channel_report(session, created_date, channel):
     stmt = session.prepare(SELECT_TICKET_COUNT_BY_CHANNEL_DATE)
-    rows = session.execute(stmt, [created_date])
-    return rows
+    rows = session.execute(stmt, [created_date, channel])
+    print("\n")
+    for row in rows:
+        print(f"- Ticket_id: {row.ticket_id}")
+        print(f" Support Channel: {row.support_channel}")
+        print(f" Count: {row.ticket_count}")
+        print("\n")
+    print("\n")
+    input("Press any key to continue...")
+    print("\n")

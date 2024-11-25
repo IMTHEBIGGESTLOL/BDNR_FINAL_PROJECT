@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 from cassandra.cluster import Cluster
 from pymongo import MongoClient
@@ -91,7 +92,19 @@ def print_menu():
 def print_customer_menu():
     menu_options = {
         1: "See my tickets",
-        2: "Log Out"
+        2: "Search my comments",
+        3: "Log Out"
+    }
+    for key, value in menu_options.items():
+        print(f"{key} -- {value}")
+
+def print_admin_menu():
+    menu_options = {
+        1: "See all tickets in a given day",
+        2: "All urgent tickets in a Date Range",
+        3: "Feedback of an agent",
+        4: "Daily report",
+        5: "Logout"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -143,6 +156,9 @@ def menu_handler():
                         #cassandra call to tickets_by_customer
                         model.get_user_tickets(cassandra_session, customer_id)
                     if choice_2 == 2:
+                        keyword = input("Keyword to search: ")
+                        modeldgraph.search_messages_by_keyword(dgraph_client, keyword)
+                    if choice_2 == 3:
                         print("Logging out")
                         break
             if role == 'agent':
@@ -177,6 +193,31 @@ def menu_handler():
 
             if role == 'admin':
                 print(f"Welcome allmighty {user}")
+                while True:
+                    print_admin_menu()
+                    choice_2 = int(input("Select an option: "))
+                    if choice_2 == 1:
+                        #cassandra call to tickets_by_customer
+                        date = input("Enter date to search (YYYY-MM-DD): ")
+                        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                        model.get_tickets_by_date(cassandra_session, date_obj)
+                    if choice_2 == 2:
+                        start_date = input("Enter start date to search (YYYY-MM-DD): ")
+                        start_date = datetime.strptime(start_date, '%Y-%m-%d')
+                        end_date = input("Enter end date to search (YYYY-MM-DD): ")
+                        end_date = datetime.strptime(end_date, '%Y-%m-%d')
+                        model.get_urgent_tickets_by_time(cassandra_session, start_date, end_date)
+                    if choice_2 == 3:
+                        agent_id = int(input("Enter the agent id: "))
+                        model.get_feedback_by_agent(cassandra_session, agent_id)
+                    if choice_2 == 4:
+                        channel = input("Enter the channel to filter [phone, email, chat]: ")
+                        date = input("Enter date of the report: [YYYY-MM-DD]")
+                        date = datetime.strptime(date, '%Y-%m-%d')
+                        model.get_daily_channel_report(cassandra_session, date, channel)
+                    if choice_2 == 5:
+                        print("Logging out")
+                        break
             #get_cassandra_username
                 #Cassandra uses sequencial username id
             #Mongo_db username

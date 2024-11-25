@@ -1,7 +1,8 @@
 from datetime import datetime
 import json
 import uuid
-
+import pandas as pd
+from tabulate import tabulate
 
 import pydgraph
 
@@ -33,6 +34,7 @@ def set_schema(client):
         sender
         message_text
         timestamp
+        belongs_to
     }
 
     username: string @index(exact) .
@@ -49,11 +51,12 @@ def set_schema(client):
     
     message_id: string @index(exact) .
     sender: uid .
+    belongs_to: uid .
     message_text: string @index(fulltext) .
     timestamp: datetime @index(hour) .
     
     assigned_to: uid @reverse .
-    messages: [uid] .
+    messages: [uid] @reverse .
     created_by: uid @reverse .
     assigned_tickets: [uid] .
     created_tickets: [uid] .
@@ -76,6 +79,7 @@ def create_data(client, ticket_data, agent_ids, customer_ids):
             {'uid': f'_:customer1', 'dgraph.type': 'User', 'username': 'petlover1', 'role': 'customer', 'customer_id': customer_ids[0]},
             {'uid': f'_:customer2', 'dgraph.type': 'User', 'username': 'petlover2', 'role': 'customer', 'customer_id': customer_ids[1]},
             {'uid': f'_:admin1', 'dgraph.type': 'User', 'username': 'admin1', 'role': 'admin', 'admin_id': 1},
+            
         ] + ticket_data
 
         # Mutate and commit
@@ -108,11 +112,9 @@ def search_messages_by_keyword(client, keyword):
     query = """
     query search_messages($a: string) {
         all_messages(func: anyoftext(message_text, $a)) {
-            message_id
-            sender_id
             message_text
             timestamp
-            belongs_to_ticket {
+            belongs_to {
                 ticket_id
                 status
             }
@@ -123,4 +125,20 @@ def search_messages_by_keyword(client, keyword):
     messages = json.loads(res.json)
 
     # Print results
-    print(f"Messages containing '{keyword}':\n{json.dumps(messages, indent=2)}")
+    table_data = []
+    for message in messages["all_messages"]:
+        row = {
+            "message_text": message["message_text"],
+            "ticket_id": message["belongs_to"]["ticket_id"],
+            "status": message["belongs_to"]["status"]
+        }
+        table_data.append(row)
+
+    # Create a pandas DataFrame
+    df = pd.DataFrame(table_data)
+
+    # Use tabulate to add a border around the table
+    table = tabulate(df, headers="keys", tablefmt="grid", showindex=False)
+
+    # Display the table with borders
+    print(table)

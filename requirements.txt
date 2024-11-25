@@ -10,3 +10,6 @@ pydgraph
 #Cassandra
 cassandra-driver
 time_uuid
+
+pandas
+tabulate
