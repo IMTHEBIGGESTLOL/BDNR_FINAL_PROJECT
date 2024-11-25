@@ -27,6 +27,9 @@ cassandra_session = cassandra_cluster.connect()
 model.create_keyspace(cassandra_session, KEYSPACE, REPLICATION_FACTOR)
 cassandra_session.set_keyspace(KEYSPACE)
 
+mongodb_client = MongoClient(MONGODB_URI)
+mongodb_database = mongodb_client[DB_NAME]
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Initializing databases...")
@@ -231,7 +234,7 @@ def menu_handler():
             #insert dgraph 
             #modeldgraph.create_data(dgraph_client)
             #insert Cassandra
-            model.bulk_insert(cassandra_session, dgraph_client)
+            model.bulk_insert(cassandra_session, dgraph_client, mongodb_client)
             print("Data inserted successfully.")
         
         if choice not in range(1, 9):

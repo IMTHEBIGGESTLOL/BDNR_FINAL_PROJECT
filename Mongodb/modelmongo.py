@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 class User(BaseModel):
-    id: str = Field(default_factory=uuid.uuid4, alias="_id")
+    uuid: str = Field( alias="_uuid")
     username: str = Field(...)
     email: str = Field(...)
     password: str = Field(...)  # hashed
@@ -20,7 +20,7 @@ class User(BaseModel):
         populate_by_name = True
         json_schema_extra = {
             "example": {
-                "_id": "123e4567-e89b-12d3-a456-426614174000",
+                "_uuid": "123e4567-e89b-12d3-a456-426614174000",
                 "username": "john_doe",
                 "email": "john.doe@example.com",
                 "password": "hashedpassword123",
@@ -35,7 +35,7 @@ class User(BaseModel):
         }
 
 class Ticket(BaseModel):
-    id: str = Field(default_factory=uuid.uuid4, alias="_id")
+    uuid: str = Field(alias="_uuid")
     customer_id: str = Field(...)  # references Users collection
     description: str = Field(...)
     status: str = Field(...)  # e.g., "open", "closed"
@@ -56,7 +56,7 @@ class Ticket(BaseModel):
         populate_by_name = True
         json_schema_extra = {
             "example": {
-                "_id": "123e4567-e89b-12d3-a456-426614174001",
+                "_uuid": "123e4567-e89b-12d3-a456-426614174001",
                 "customer_id": "123e4567-e89b-12d3-a456-426614174000",
                 "description": "Cannot log in to my account",
                 "status": "open",
@@ -82,7 +82,7 @@ class Ticket(BaseModel):
         }
 
 class AgentAssignment(BaseModel):
-    id: str = Field(default_factory=uuid.uuid4, alias="_id")
+    uuid: str = Field(default_factory=uuid.uuid4, alias="_uuid")
     agent_id: str = Field(...)  # references Users collection
     ticket_id: str = Field(...)  # references Tickets collection
     assigned_timestamp: str = Field(...)
@@ -92,7 +92,7 @@ class AgentAssignment(BaseModel):
         populate_by_name = True
         json_schema_extra = {
             "example": {
-                "_id": "123e4567-e89b-12d3-a456-426614174002",
+                "_uuid": "123e4567-e89b-12d3-a456-426614174002",
                 "agent_id": "123e4567-e89b-12d3-a456-426614174003",
                 "ticket_id": "123e4567-e89b-12d3-a456-426614174001",
                 "assigned_timestamp": "2024-11-13T10:00:00Z",
@@ -101,7 +101,7 @@ class AgentAssignment(BaseModel):
         }
 
 class DailyReport(BaseModel):
-    id: str = Field(default_factory=uuid.uuid4, alias="_id")
+    uuid: str = Field(default_factory=uuid.uuid4, alias="_uuid")
     report_date: str = Field(...)
     ticket_count: int = Field(...)
     channel_stats: dict = Field({
@@ -114,7 +114,7 @@ class DailyReport(BaseModel):
         populate_by_name = True
         json_schema_extra = {
             "example": {
-                "_id": "123e4567-e89b-12d3-a456-426614174003",
+                "_uuid": "123e4567-e89b-12d3-a456-426614174003",
                 "report_date": "2024-11-13",
                 "ticket_count": 100,
                 "channel_stats": {

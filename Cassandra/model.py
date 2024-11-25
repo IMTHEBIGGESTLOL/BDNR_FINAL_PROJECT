@@ -190,7 +190,7 @@ def create_schema(session):
     session.execute(CREATE_ESCALATION_BY_TICKET_TABLE)
     session.execute(CREATE_TICKET_COUNT_BY_CHANNEL_DATE_TABLE)
 
-def bulk_insert(session, dgraph_client):
+def bulk_insert(session, dgraph_client, mongo_client):
     # Prepare the insert statements for Cassandra
     ticket_by_date_stmt = session.prepare("INSERT INTO ticket_by_date (created_date, created_timestamp, ticket_id, customer_id, description, status) VALUES (?, ?, ?, ?, ?, ?)")
     activity_by_ticket_stmt = session.prepare("INSERT INTO activity_by_ticket (ticket_id, activity_timestamp, activity_type, status, agent_id) VALUES (?, ?, ?, ?, ?)")
@@ -200,6 +200,13 @@ def bulk_insert(session, dgraph_client):
     tickets_by_customer_stmt = session.prepare("INSERT INTO tickets_by_customer (customer_id, ticket_id, created_timestamp, status, priority) VALUES (?, ?, ?, ?, ?)")
     escalation_by_ticket_stmt = session.prepare("INSERT INTO escalation_by_ticket (ticket_id, escalation_timestamp, escalation_level, agent_id, comments) VALUES (?, ?, ?, ?, ?)")
     ticket_count_by_channel_date_stmt = session.prepare("INSERT INTO ticket_count_by_channel_date (created_date, support_channel, ticket_count, ticket_id) VALUES (?, ?, ?, ?)")
+
+    # MongoDB Collections
+    db = mongo_client["final_project"]  # Replace with your DB name
+    tickets_collection = db["tickets"]
+    users_collection = db["users"]
+    agent_assignments_collection = db["agent_assignments"]
+    daily_reports_collection = db["daily_reports"]
 
     # Data generation
     ticket_ids = [i for i in range(1, 11)]
@@ -212,6 +219,14 @@ def bulk_insert(session, dgraph_client):
     escalation_levels = ['level_1', 'level_2', 'level_3']
 
     batch = BatchStatement()
+
+    # Create agents and customers in the Users collection
+    users_data = [
+        {"_uuid": agent_id, "username": f"agent_{i+1}", "role": "agent", "profile": {"name": f"Agent {i+1}"}} for i, agent_id in enumerate(agent_ids)
+    ] + [
+        {"_uuid": customer_id, "username": f"customer_{i+1}", "role": "customer", "profile": {"name": f"Customer {i+1}"}} for i, customer_id in enumerate(customer_ids)
+    ]
+    users_collection.insert_many(users_data)
     
     ticket_data = []
     for i, ticket_id in enumerate(ticket_ids):
@@ -249,7 +264,46 @@ def bulk_insert(session, dgraph_client):
             'created_by': {'uid': f'_:customer{customer_ids.index(customer_id)+1}'},
             'messages': [{'uid': f'_:message{i}', 'dgraph.type': 'Message', 'sender': { 'uid' : f'_:customer{customer_ids.index(customer_id)+1}'}, 'message_text': 'text', 'belongs_to': {'uid': f'_:ticket{i+1}'}},]
         })
+
+        #Data to mongoDB
+        # Mongo: Insert into Tickets Collection
+        ticket_document = {
+            "_uuid": ticket_id,
+            "customer_id": customer_id,
+            "description": f"Ticket {i+1} issue description",
+            "status": random.choice(statuses),
+            "priority": random.choice(priorities),
+            "created_timestamp": created_timestamp.isoformat(),
+            "updated_timestamp": created_timestamp.isoformat(),
+            "category": "technical",
+            "channel": random.choice(support_channels),
+            "messages": [],
+            "feedback": {},
+            "resolution_steps": []
+        }
+        tickets_collection.insert_one(ticket_document)
+
+        # Mongo: Insert into AgentAssignments Collection
+        assignment_document = {
+            "_uuid": str(uuid.uuid4()),
+            "agent_id": agent_id,
+            "ticket_id": ticket_id,
+            "assigned_timestamp": created_timestamp.isoformat(),
+            "priority_level": ticket_document["priority"]
+        }
+        agent_assignments_collection.insert_one(assignment_document)
     
+    # Generate and insert daily report
+    daily_report = {
+        "_uuid": str(uuid.uuid4()),
+        "report_date": datetime.now().date().isoformat(),
+        "ticket_count": len(ticket_ids),
+        "channel_stats": {
+            channel: sum(1 for t in tickets_collection.find({"channel": channel})) for channel in support_channels
+        }
+    }
+    daily_reports_collection.insert_one(daily_report)
+
     # Execute the batch
     session.execute(batch)
     
