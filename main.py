@@ -109,7 +109,9 @@ def print_admin_menu():
         3: "Feedback of an agent",
         4: "Daily report",
         5: "Search tickets by filter",
-        6: "Logout"
+        6: "Update Status and/or Priority Tickets",
+        7: "See Users by ID",
+        8: "Logout"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -121,7 +123,9 @@ def print_agent_menu():
         3: "See escalation per ticket",
         4: "See activities per ticket",
         5: "Search tickets by filter",
-        6: "Log Out"
+        6: "Update Status and/or Priority Tickers",
+        7: "See Customers by ID",
+        8: "Log Out"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -196,6 +200,10 @@ def menu_handler():
                     elif choice_2 == 5:
                         mdb_functions.search_ticket_by()
                     elif choice_2 == 6:
+                        mdb_functions.update_ticket() 
+                    elif choice_2 == 7:
+                        mdb_functions.get_customer() 
+                    elif choice_2 == 8:
                         print("Logging out...")
                         break
 
@@ -225,7 +233,11 @@ def menu_handler():
                         model.get_daily_channel_report(cassandra_session, date, channel)
                     if choice_2 == 5:
                         mdb_functions.search_ticket_by()
-                    if choice_2 == 6:
+                    elif choice_2 == 6:
+                        mdb_functions.update_ticket() 
+                    elif choice_2 == 7:
+                        mdb_functions.get_user() 
+                    elif choice_2 == 8:
                         print("Logging out...")
                         break
             #get_cassandra_username

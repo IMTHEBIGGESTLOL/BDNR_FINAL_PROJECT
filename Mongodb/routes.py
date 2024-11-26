@@ -3,6 +3,8 @@ from fastapi import APIRouter, Body, Request, Response, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from typing import List
 from pymongo import MongoClient
+from pymongo import ReturnDocument
+
 
 from .modelmongo import User, Ticket, AgentAssignment, DailyReport, UpdateUser, UpdateTicket
 
@@ -42,6 +44,24 @@ async def get_users():
     users = list(db.users.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
     return users
 
+@router.get("/users", response_description="Get all users (ID and Name)")
+async def get_all_users():
+    users = db.users.find({}, {"uuid": 1, "username": 1})  # Project only _id and name
+    user_list = [{"uuid": user["uuid"], "username": user["username"]} for user in users]
+    if not user_list:
+        raise HTTPException(status_code=404, detail="No users found.")
+    return user_list
+
+
+@router.get("/users/customers", response_description="Get all customers (ID and Name)")
+async def get_all_customers():
+    customers = db.users.find({"role": "customer"}, {"uuid": 1, "username": 1})  # Filter by role and project only _id and name
+    customer_list = [{"uuid": customer["uuid"], "username": customer["username"]} for customer in customers]
+    if not customer_list:
+        raise HTTPException(status_code=404, detail="No customers found.")
+    return customer_list
+
+
 @router.get("/tickets/", response_model=List[Ticket])
 async def get_tickets():
     tickets = list(db.tickets.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
@@ -57,47 +77,78 @@ async def get_Agent_Assignments():
     agent_assignments = list(db.agent_assignments.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
     return agent_assignments
 
-
 # Search by Id in users
 @router.get("/users/{id}", response_description="Get a user by ID", response_model=List[User])
 async def get_users_id(id: str, request: Request):
     if (user := list(db.users.find({"uuid": id}))) is not None:
         return user
 
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Book with ID {id} not found")
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User with ID {id} not found")
+
+@router.get("/users/customers/{id}", response_description="Get a customer by ID", response_model=List[User])
+async def get_customer_by_id(id: str, request: Request):
+    if (user := list(db.users.find({"uuid": id, "role": "customer"}))) is not None:
+        return user
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User with ID {id} not found")
+
+
+
 
 # ROUTES FOR FILTER IN TICKETS
 @router.get("/tickets/customerID/{customer_id}", response_description="Get Ticket by customer ID", response_model=List[Ticket])
 async def get_tickets_custID(customer_id: str, request: Request):
     tickets = list(db.tickets.find({"customer_id": customer_id}))
-    if tickets:
-        return tickets
-    else:
-        print(f"No tickets with Customer ID: {customer_id} found.")
+    if tickets is None:
+        raise HTTPException(status_code=404, detail=f"Ticket with Customer ID: {customer_id} not found.")
+    
+    return tickets
 
 @router.get("/tickets/status/{status}", response_description="Get a ticket by their Status", response_model=List[Ticket])
 async def get_tickets_status(status: str, request: Request):
     tickets = list(db.tickets.find({"status": status}))
-    if tickets:
-        return tickets
-    else:
-        print(f"No tickets with status: {status} found.")
+    if tickets is None:
+        raise HTTPException(status_code=404, detail=f"Ticket with status: {status} not found.")
+    
+    return tickets
 
 @router.get("/tickets/priority/{priority}", response_description="Get a ticket by their priority", response_model=List[Ticket])
 async def get_tickets_priority(priority: str, request: Request):
     tickets = list(db.tickets.find({"priority": priority}))
-    if tickets:
-        return tickets
-    else:
-        print(f"No tickets with priority: {priority} found.")
-
+    if tickets is None:
+        raise HTTPException(status_code=404, detail=f"Ticket with priority: {priority} not found.")
+    
+    return tickets
+    
 # GET ALL TICKETS
 @router.get("/tickets/", response_model=List[Ticket])
 async def get_tickets():
     tickets = list(db.tickets.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    if tickets is None:
+        raise HTTPException(status_code=404, detail=f"No tickets")
+    
     return tickets
 
-#
+# UPDATES
+
+# TICKET UPDATE STATUS OR PRIORITY
+
+@router.patch("/tickets/{ticket_id}", response_model=Ticket, response_description="Update ticket status or priority")
+async def update_ticket(ticket_id: str, updates: dict):
+    allowed_updates = {"status", "priority"}
+    # Validate that only allowed fields are being updated
+    if not all(field in allowed_updates for field in updates.keys()):
+        raise HTTPException(status_code=400, detail="Invalid fields in updates. Only 'status' and 'priority' are allowed.")
+
+    updated_ticket = db.tickets.find_one_and_update(
+        {"uuid": ticket_id},
+        {"$set": updates},
+        return_document=ReturnDocument.AFTER
+    )
+    if updated_ticket is None:
+        raise HTTPException(status_code=404, detail=f"Ticket with ID {ticket_id} not found.")
+
+    return updated_ticket
 
 #Base URL
 @router.get("/")
