@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from Cassandra import model
 from DGraph import modeldgraph
 from Mongodb.routes import router as db_router
+from Mongodb import client as mdb_functions
 
 # Configuración de entornos
 CLUSTER_IPS = os.getenv('CASSANDRA_CLUSTER_IPS', 'localhost')
@@ -107,7 +108,8 @@ def print_admin_menu():
         2: "All urgent tickets in a Date Range",
         3: "Feedback of an agent",
         4: "Daily report",
-        5: "Logout"
+        5: "Search tickets by filter",
+        6: "Logout"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -118,7 +120,8 @@ def print_agent_menu():
         2: "See my feedback per ticket",
         3: "See escalation per ticket",
         4: "See activities per ticket",
-        5: "Log Out"
+        5: "Search tickets by filter",
+        6: "Log Out"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -191,6 +194,8 @@ def menu_handler():
                         ticket_id = int(input("Insert ticket id you want to search: "))
                         model.get_activities_by_ticket(cassandra_session, ticket_id, agent_id)
                     elif choice_2 == 5:
+                        mdb_functions.search_ticket_by()
+                    elif choice_2 == 6:
                         print("Logging out...")
                         break
 
@@ -219,7 +224,9 @@ def menu_handler():
                         date = datetime.strptime(date, '%Y-%m-%d')
                         model.get_daily_channel_report(cassandra_session, date, channel)
                     if choice_2 == 5:
-                        print("Logging out")
+                        mdb_functions.search_ticket_by()
+                    if choice_2 == 6:
+                        print("Logging out...")
                         break
             #get_cassandra_username
                 #Cassandra uses sequencial username id

@@ -66,9 +66,44 @@ async def get_users_id(id: str, request: Request):
 
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Book with ID {id} not found")
 
+# ROUTES FOR FILTER IN TICKETS
+@router.get("/tickets/customerID/{customer_id}", response_description="Get Ticket by customer ID", response_model=List[Ticket])
+async def get_tickets_custID(customer_id: str, request: Request):
+    tickets = list(db.tickets.find({"customer_id": customer_id}))
+    if tickets:
+        return tickets
+    else:
+        print(f"No tickets with Customer ID: {customer_id} found.")
+
+@router.get("/tickets/status/{status}", response_description="Get a ticket by their Status", response_model=List[Ticket])
+async def get_tickets_status(status: str, request: Request):
+    tickets = list(db.tickets.find({"status": status}))
+    if tickets:
+        return tickets
+    else:
+        print(f"No tickets with status: {status} found.")
+
+@router.get("/tickets/priority/{priority}", response_description="Get a ticket by their priority", response_model=List[Ticket])
+async def get_tickets_priority(priority: str, request: Request):
+    tickets = list(db.tickets.find({"priority": priority}))
+    if tickets:
+        return tickets
+    else:
+        print(f"No tickets with priority: {priority} found.")
+
+# GET ALL TICKETS
+@router.get("/tickets/", response_model=List[Ticket])
+async def get_tickets():
+    tickets = list(db.tickets.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    return tickets
+
+#
 
 #Base URL
 @router.get("/")
 async def root():
     return {"message": "Welcome to the API! Access /users/ to manage users."}
     
+@router.get("/nothing/")
+async def base_result():
+    return {"message": "No results for query found"}
