@@ -4,16 +4,12 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 
 class User(BaseModel):
-    uuid: str = Field( alias="_uuid")
+    uuid: str = Field(...)
     username: str = Field(...)
-    email: str = Field(...)
-    password: str = Field(...)  # hashed
+    email: str = Field(...)  # Email es opcional
     role: str = Field(...)  # "customer" or "agent"
     profile: dict = Field({
-        "name": None,
-        "phone_number": None,
-        "preferences": None,  # e.g., preferred contact channels
-        "profile_picture": None  # URL to the profile image
+        "name": None
     })
 
     class Config:
@@ -62,7 +58,7 @@ class UpdateUser(BaseModel):
 
 
 class Ticket(BaseModel):
-    uuid: str = Field(alias="_uuid")
+    uuid: str = Field(...)
     customer_id: str = Field(...)  # references Users collection
     description: str = Field(...)
     status: str = Field(...)  # e.g., "open", "closed"
@@ -115,7 +111,7 @@ class UpdateTicket(BaseModel):
     resolution_steps: Optional[List[str]]  # Optional, allows updates to the resolution steps
 
 class AgentAssignment(BaseModel):
-    uuid: str = Field(default_factory=uuid.uuid4, alias="_uuid")
+    uuid: str = Field(...)
     agent_id: str = Field(...)  # references Users collection
     ticket_id: str = Field(...)  # references Tickets collection
     assigned_timestamp: str = Field(...)
@@ -134,7 +130,7 @@ class AgentAssignment(BaseModel):
         }
 
 class DailyReport(BaseModel):
-    uuid: str = Field(default_factory=uuid.uuid4, alias="_uuid")
+    uuid: str = Field(...)
     report_date: str = Field(...)
     ticket_count: int = Field(...)
     channel_stats: dict = Field({

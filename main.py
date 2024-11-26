@@ -30,10 +30,6 @@ cassandra_session.set_keyspace(KEYSPACE)
 mongodb_client = MongoClient(MONGODB_URI)
 mongodb_database = mongodb_client[DB_NAME]
 
-#Pruebas de MOngo
-app = FastAPI()
-app.include_router(db_router, tags=["users"], prefix="/user")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -77,9 +73,8 @@ async def lifespan(app: FastAPI):
         print("All database connections closed.")
 
 app = FastAPI(lifespan=lifespan)
-
 # Rutas de FastAPI
-app.include_router(db_router, tags=["project"], prefix="/project")
+app.include_router(db_router, tags=["project"])
 
 # Menú interactivo
 def print_menu():

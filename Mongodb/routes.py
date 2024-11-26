@@ -2,15 +2,21 @@
 from fastapi import APIRouter, Body, Request, Response, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from typing import List
+from pymongo import MongoClient
 
 from .modelmongo import User, Ticket, AgentAssignment, DailyReport, UpdateUser, UpdateTicket
 
 router = APIRouter()
 
+# Configura la conexión a MongoDB
+client = MongoClient("mongodb://localhost:27017/")
+db = client["final_project"]
+
 # DATA INSERT TO UVICORN:
-@router.post("/userss/")
+@router.post("/users/")
 async def create_users(users: List[User]):
-    db.users.insert_many([user.dict(by_alias=True) for user in users])
+    # Usa model_dump en lugar de dict
+    db.users.insert_many([user.model_dump(by_alias=True) for user in users])
     return {"message": "Users added successfully"}
 
 @router.post("/tickets/")
@@ -39,9 +45,11 @@ def find_user(id: str, request: Request):
 
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User with ID: {id} not found")
 
-@router.get("/users/")
-def get_users():
-    users = list(db.users.find({}))
-    for user in users:
-        user["_id"] = str(user["_id"])  # Convertir ObjectId a string
-    return users
+@router.get("/users/", response_model=List[User])
+async def get_users():
+    users = list(db.users.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    return users
+
+@router.get("/")
+async def root():
+    return {"message": "Welcome to the API! Access /users/ to manage users."}

@@ -236,11 +236,11 @@ def bulk_insert(session, dgraph_client, mongo_client):
 
     # Create agents and customers in the Users collection
     users_data = [
-        {"_uuid": f"{agent_id}_", "username": f"agent_{i+1}", "role": "agent", "profile": {"name": f"Agent {i+1}"}} for i, agent_id in enumerate(agent_ids)
+        {"uuid": f"{agent_id}_", "username": f"agent_{i+1}", "email": f"agent{agent_id}@example.com","role": "agent", "profile": {"name": f"Agent {i+1}"}} for i, agent_id in enumerate(agent_ids)
     ] + [
-        {"_uuid": customer_id, "username": f"customer_{i+1}", "role": "customer", "profile": {"name": f"Customer {i+1}"}} for i, customer_id in enumerate(customer_ids)
+        {"uuid": f"{customer_id}", "username": f"customer_{i+1}", "email": f"customer{customer_id}@example.com","role": "customer", "profile": {"name": f"Customer {i+1}"}} for i, customer_id in enumerate(customer_ids)
     ]
-    users_collection.insert_many(users_data)
+    #users_collection.insert_many(users_data)
     
     users_data_serializable = convert_objectid(users_data)
     requests.post(f"{base_url}/users/", json=users_data_serializable)
