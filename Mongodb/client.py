@@ -212,9 +212,9 @@ def update_ticket_in_cassandra( dgraph_client,session, ticket_id, updates, agent
                 base_query += f"{field} = %s AND "
             query_params.append(value)
         base_query = base_query.rstrip(" AND ")  # Eliminar el último "AND" extra
-        input(f"{base_query}")
+        #input(f"{base_query}")
         result = session.execute(base_query, query_params)
-        input(f"{base_query}")
+        #input(f"{base_query}")
         row = result.one()
         if row:
             return dict(row._asdict())  # Convierte Row en diccionario
