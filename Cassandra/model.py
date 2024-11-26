@@ -32,8 +32,8 @@ CREATE_TICKET_BY_DATE_TABLE = """
         customer_id INT,
         description TEXT,
         status TEXT,
-        PRIMARY KEY ((created_date), created_timestamp)
-    ) WITH CLUSTERING ORDER BY (created_timestamp ASC);
+        PRIMARY KEY ((created_date),ticket_id,  created_timestamp)
+    ) WITH CLUSTERING ORDER BY (ticket_id ASC, created_timestamp ASC);
 """
 
 CREATE_ACTIVITY_BY_TICKET_TABLE = """
@@ -69,14 +69,14 @@ CREATE_FEEDBACK_BY_AGENT_TABLE = """
 """
 
 CREATE_URGENT_TICKETS_BY_TIME_TABLE = """
-    CREATE TABLE urgent_tickets_by_time (
-        priority_level TEXT,
+    CREATE TABLE IF NOT EXISTS urgent_tickets_by_time (
+        priority TEXT,
         created_timestamp DATE,
         ticket_id INT,
         customer_id INT,
         description TEXT,
         agent_id INT,
-        PRIMARY KEY (priority_level, created_timestamp, ticket_id)
+        PRIMARY KEY (priority, created_timestamp, ticket_id)
     );
 """
 
@@ -87,8 +87,8 @@ CREATE_TICKETS_BY_CUSTOMER_TABLE = """
         created_timestamp TIMESTAMP,
         status TEXT,
         priority TEXT,
-        PRIMARY KEY ((customer_id), created_timestamp)
-    ) WITH CLUSTERING ORDER BY (created_timestamp ASC);
+        PRIMARY KEY ((customer_id), ticket_id, created_timestamp)
+    ) WITH CLUSTERING ORDER BY (ticket_id ASC, created_timestamp ASC);
 """
 
 CREATE_ESCALATION_BY_TICKET_TABLE = """
@@ -151,7 +151,7 @@ SELECT_FEEDBACK_BY_AGENT = """
 SELECT_URGENT_TICKETS_BY_TIME = """
     SELECT ticket_id, created_timestamp, customer_id, description, agent_id
     FROM urgent_tickets_by_time
-    WHERE priority_level = 'high'
+    WHERE priority = 'high'
     AND created_timestamp <= ?
     AND created_timestamp >= ?
     ORDER BY created_timestamp ASC
@@ -194,7 +194,7 @@ def create_schema(session):
     session.execute(CREATE_TICKET_COUNT_BY_CHANNEL_DATE_TABLE)
 
 def bulk_insert(session, dgraph_client, mongo_client):
-    base_url = "http://localhost:8003"  # Cambia el puerto si tu servidor usa otro
+    base_url = "http://localhost:8003" 
     def convert_objectid(data):
         if isinstance(data, list):
             return [convert_objectid(item) for item in data]
@@ -210,13 +210,13 @@ def bulk_insert(session, dgraph_client, mongo_client):
     activity_by_ticket_stmt = session.prepare("INSERT INTO activity_by_ticket (ticket_id, activity_timestamp, activity_type, status, agent_id) VALUES (?, ?, ?, ?, ?)")
     tickets_by_agent_date_stmt = session.prepare("INSERT INTO tickets_by_agent_date (agent_id, assigned_date, ticket_id, priority, status) VALUES (?, ?, ?, ?, ?)")
     feedback_by_agent_stmt = session.prepare("INSERT INTO feedback_by_agent (agent_id, ticket_id, feedback_rating, feedback_comments) VALUES (?, ?, ?, ?)")
-    urgent_tickets_by_time_stmt = session.prepare("INSERT INTO urgent_tickets_by_time (priority_level, created_timestamp, ticket_id, customer_id, description, agent_id) VALUES (?, ?, ?, ?, ?, ?)")
+    urgent_tickets_by_time_stmt = session.prepare("INSERT INTO urgent_tickets_by_time (priority, created_timestamp, ticket_id, customer_id, description, agent_id) VALUES (?, ?, ?, ?, ?, ?)")
     tickets_by_customer_stmt = session.prepare("INSERT INTO tickets_by_customer (customer_id, ticket_id, created_timestamp, status, priority) VALUES (?, ?, ?, ?, ?)")
     escalation_by_ticket_stmt = session.prepare("INSERT INTO escalation_by_ticket (ticket_id, escalation_timestamp, escalation_level, agent_id, comments) VALUES (?, ?, ?, ?, ?)")
     ticket_count_by_channel_date_stmt = session.prepare("INSERT INTO ticket_count_by_channel_date (created_date, support_channel, ticket_count, ticket_id) VALUES (?, ?, ?, ?)")
 
     # MongoDB Collections
-    db = mongo_client["final_project"]  # Replace with your DB name
+    db = mongo_client["final_project"] 
     tickets_collection = db["tickets"]
     users_collection = db["users"]
     agent_assignments_collection = db["agent_assignments"]
@@ -338,7 +338,7 @@ def bulk_insert(session, dgraph_client, mongo_client):
         }]    
         response = requests.post(f"{base_url}/AgentAssignments/", json=assignment_document_serializable)
         if response.status_code == 422:
-            print(response.json())  # This will give you details about which field is causing the issue
+            print(response.json())  
 
         
     
@@ -356,7 +356,7 @@ def bulk_insert(session, dgraph_client, mongo_client):
     daily_report_serializable = [convert_objectid(daily_report)]
     response = requests.post(f"{base_url}/dailyReports/", json=daily_report_serializable)
     if response.status_code == 422:
-        print(response.json())  # This will give you details about which field is causing the issue
+        print(response.json())  
     
     
     # Execute the batch

@@ -108,6 +108,21 @@ def search_user(client, username): #QUERY DE STRING AND INCLUDES 2 NODES
     # return results.
     return ppl['all']
 
+def search_ticket(client, ticket_id): #QUERY DE STRING AND INCLUDES 2 NODES
+    query = """query search_person($a: string) {
+        all(func: eq(ticket_id, $a)) {
+            uid
+            priority
+        }
+    }"""
+
+    variables = {'$a': ticket_id}
+    res = client.txn(read_only=True).query(query, variables=variables)
+    ppl = json.loads(res.json)
+
+    # return results.
+    return ppl['all']
+
 def search_messages_by_keyword(client, keyword):
     query = """
     query search_messages($a: string) {

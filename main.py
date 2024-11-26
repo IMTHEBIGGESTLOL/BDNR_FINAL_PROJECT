@@ -200,7 +200,7 @@ def menu_handler():
                     elif choice_2 == 5:
                         mdb_functions.search_ticket_by()
                     elif choice_2 == 6:
-                        mdb_functions.update_ticket() 
+                        mdb_functions.update_ticket(cassandra_session, dgraph_client, agent_id) 
                     elif choice_2 == 7:
                         mdb_functions.get_customer() 
                     elif choice_2 == 8:

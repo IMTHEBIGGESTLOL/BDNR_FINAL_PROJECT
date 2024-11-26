@@ -3,6 +3,8 @@ import argparse
 import logging
 import os
 import requests
+from datetime import datetime
+from DGraph import modeldgraph
 
 # Set logger
 log = logging.getLogger()
@@ -141,7 +143,7 @@ def search_ticket_by():
         print(f"Error: {response.status_code} - {response.text}")
 
 
-def update_ticket():
+def update_ticket(session, dgraph_client, agent_id):
     ticket_id = input("Enter the Ticket ID to update: ")
     update_data = {}
 
@@ -177,13 +179,141 @@ def update_ticket():
     response = requests.patch(endpoint, json=update_data)
     if response.ok:
         print("Ticket updated successfully:")
+        # Llamar a funciones para actualizar Cassandra y Dgraph
+        update_ticket_in_cassandra(session, ticket_id, update_data, agent_id)
+        update_ticket_in_dgraph(dgraph_client, ticket_id, update_data)
         print_object(response.json())
     else:
         print(f"Error: {response.status_code} - {response.text}")
 
+from cassandra.query import SimpleStatement
 
-def main():
-    log.info(f"Welcome to books catalog. App requests to: {PROJECT_API_URL}")
-    get_customer()
-if __name__ == "__main__":
-    main()
+from cassandra.query import SimpleStatement
+from datetime import datetime
+
+def update_ticket_in_cassandra(session, ticket_id, updates, agent_id):
+    # Obtener las claves necesarias para cada tabla
+    ticket_id = int(ticket_id)  # Convertir ticket_id a entero
+
+    def fetch_ticket_row(table_name, ticket_id, additional_conditions=None):
+        base_query = f"SELECT * FROM {table_name} WHERE ticket_id = %s"
+        query_params = [ticket_id]
+
+        if additional_conditions:
+            for field, value in additional_conditions.items():
+                base_query += f" AND {field} = %s"
+                query_params.append(value)
+
+        base_query += " ALLOW FILTERING"
+
+        result = session.execute(base_query, query_params)
+        row = result.one()
+        if row:
+            return dict(row._asdict())  # Convierte Row en diccionario
+        else:
+            return None
+
+
+    # Configuración de las tablas y condiciones adicionales necesarias
+    tables_to_update = {
+        "ticket_by_date": {},
+        "tickets_by_agent_date": {"agent_id": agent_id},
+        "tickets_by_customer": {},
+        "urgent_tickets_by_time": {"agent_id": agent_id}
+    }
+
+    # Obtener los datos actuales de cada tabla
+    table_data = {}
+    for table, conditions in tables_to_update.items():
+        row = fetch_ticket_row(table, ticket_id, conditions)
+        if row:
+            table_data[table] = row
+        else:
+            print(f"Ticket {ticket_id} not found in table {table}")
+            return  # Manejar el caso de no encontrar el ticket
+
+    # Extraer el nuevo estado o prioridad, si están en la actualización
+    new_status = updates.get("status")
+    new_priority = updates.get("priority")
+
+    # Generar sentencias de actualización para cada tabla relevante
+    update_queries = []
+
+    if new_status:
+        update_queries.append(SimpleStatement(f"""
+            UPDATE ticket_by_date SET status = '{new_status}' 
+            WHERE ticket_id = {ticket_id} AND created_date = '{table_data['ticket_by_date']['created_date']}' AND created_timestamp = '{table_data['ticket_by_date']['created_timestamp']}'
+        """))
+        update_queries.append(SimpleStatement(f"""
+            UPDATE tickets_by_agent_date 
+            SET status = '{new_status}' 
+            WHERE agent_id = {agent_id} AND ticket_id = {ticket_id} AND assigned_date = '{table_data['tickets_by_agent_date']['assigned_date']}'
+        """))
+        update_queries.append(SimpleStatement(f"""
+            UPDATE tickets_by_customer 
+            SET status = '{new_status}' 
+            WHERE customer_id = '{table_data['tickets_by_customer']['customer_id']}' AND ticket_id = {ticket_id}
+        """))
+
+    if new_priority:
+        update_queries.append(SimpleStatement(f"""
+            UPDATE tickets_by_agent_date 
+            SET priority = '{new_priority}' 
+            WHERE agent_id = {agent_id} AND ticket_id = {ticket_id} AND assigned_date = '{table_data['tickets_by_agent_date']['assigned_date']}'        
+        """))
+        session.execute("""
+            DELETE FROM urgent_tickets_by_time 
+            WHERE priority = %s AND created_timestamp = %s AND ticket_id = %s
+        """, ( table_data['urgent_tickets_by_time']['priority'], table_data['urgent_tickets_by_time']['created_timestamp'], ticket_id))
+        update_queries.append(SimpleStatement(f"""
+            INSERT INTO urgent_tickets_by_time (ticket_id, agent_id, created_timestamp, priority)
+            VALUES ({ticket_id}, {agent_id}, '{table_data['urgent_tickets_by_time']['created_timestamp']}', '{new_priority}')
+        """))
+        update_queries.append(SimpleStatement(f"""
+            UPDATE tickets_by_customer 
+            SET priority = '{new_priority}' 
+            WHERE customer_id = {table_data['tickets_by_customer']['customer_id']} AND created_timestamp = '{table_data['tickets_by_customer']['created_timestamp']}'  AND ticket_id = {ticket_id}
+        """))
+
+    # Ejecutar todas las actualizaciones
+    for query in update_queries:
+        session.execute(query)
+
+    # Registrar la actividad en Cassandra
+    activity_query = """
+        INSERT INTO activity_by_ticket (ticket_id, activity_timestamp, activity_type, status, agent_id)
+        VALUES (%s, %s, %s, %s, %s)
+    """
+    for field, new_value in updates.items():
+        session.execute(activity_query, (ticket_id, datetime.now(), f"{field}_updated", new_value, agent_id))
+
+
+def update_ticket_in_dgraph(dgraph_client, ticket_id, update_data):
+
+    # Crear un objeto de cliente de Dgraph
+    client = dgraph_client
+    txn = client.txn()
+    ticket_data = modeldgraph.search_ticket(dgraph_client, ticket_id)
+    # Crear la mutación para actualizar los campos del ticket
+    mutation = {
+        'set': { }
+    }
+
+    # Agregar los datos a actualizar
+    mutation['set']['uid'] = ticket_data[0]['uid']
+    if 'status' in update_data:
+        mutation['set']['status'] = update_data['status']
+    if 'priority' in update_data:
+        mutation['set']['priority'] = update_data['priority']
+
+    # Especificamos el `ticket_id` en la mutación para asegurar que se actualiza el ticket correcto
+    mutation['set']['ticket_id'] = ticket_id
+
+    # Realizar la mutación para actualizar los datos en Dgraph
+    try:
+        # Realizar la mutación en Dgraph
+        txn.mutate(set_obj=mutation)
+        txn.commit()
+        print(f"Ticket {ticket_id} actualizado en Dgraph.")
+    except Exception as e:
+        print(f"Error al actualizar el ticket en Dgraph: {e}")

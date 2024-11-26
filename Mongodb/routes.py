@@ -4,7 +4,7 @@ from fastapi.encoders import jsonable_encoder
 from typing import List
 from pymongo import MongoClient
 from pymongo import ReturnDocument
-
+import requests
 
 from .modelmongo import User, Ticket, AgentAssignment, DailyReport, UpdateUser, UpdateTicket
 
@@ -41,7 +41,7 @@ async def create_daily_reports(reports: List[DailyReport]):
 # Showing all collections
 @router.get("/users/", response_model=List[User])
 async def get_users():
-    users = list(db.users.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    users = list(db.users.find({}, {"_id": 0})) 
     return users
 
 @router.get("/users", response_description="Get all users (ID and Name)")
@@ -64,17 +64,17 @@ async def get_all_customers():
 
 @router.get("/tickets/", response_model=List[Ticket])
 async def get_tickets():
-    tickets = list(db.tickets.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    tickets = list(db.tickets.find({}, {"_id": 0}))  
     return tickets
 
 @router.get("/dailyReports/", response_model=List[DailyReport])
 async def get_daily_Reports():
-    daily_reports = list(db.daily_reports.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    daily_reports = list(db.daily_reports.find({}, {"_id": 0}))  
     return daily_reports
     
 @router.get("/AgentAssignments/", response_model=List[AgentAssignment])
 async def get_Agent_Assignments():
-    agent_assignments = list(db.agent_assignments.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    agent_assignments = list(db.agent_assignments.find({}, {"_id": 0})) 
     return agent_assignments
 
 # Search by Id in users
@@ -123,7 +123,7 @@ async def get_tickets_priority(priority: str, request: Request):
 # GET ALL TICKETS
 @router.get("/tickets/", response_model=List[Ticket])
 async def get_tickets():
-    tickets = list(db.tickets.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    tickets = list(db.tickets.find({}, {"_id": 0})) 
     if tickets is None:
         raise HTTPException(status_code=404, detail=f"No tickets")
     
@@ -136,19 +136,27 @@ async def get_tickets():
 @router.patch("/tickets/{ticket_id}", response_model=Ticket, response_description="Update ticket status or priority")
 async def update_ticket(ticket_id: str, updates: dict):
     allowed_updates = {"status", "priority"}
-    # Validate that only allowed fields are being updated
+    
+    # Validar campos permitidos
     if not all(field in allowed_updates for field in updates.keys()):
-        raise HTTPException(status_code=400, detail="Invalid fields in updates. Only 'status' and 'priority' are allowed.")
+        raise HTTPException(status_code=400, detail="Invalid fields. Only 'status' and 'priority' are allowed.")
 
+    # Obtener estado actual del ticket
+    existing_ticket = db.tickets.find_one({"uuid": ticket_id})
+    if not existing_ticket:
+        raise HTTPException(status_code=404, detail=f"Ticket with ID {ticket_id} not found.")
+    
+    # Actualizar ticket en MongoDB
     updated_ticket = db.tickets.find_one_and_update(
         {"uuid": ticket_id},
         {"$set": updates},
         return_document=ReturnDocument.AFTER
     )
-    if updated_ticket is None:
-        raise HTTPException(status_code=404, detail=f"Ticket with ID {ticket_id} not found.")
-
+    
     return updated_ticket
+
+
+
 
 #Base URL
 @router.get("/")
