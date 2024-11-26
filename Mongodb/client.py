@@ -252,7 +252,7 @@ def update_ticket_in_cassandra(session, ticket_id, updates, agent_id):
         update_queries.append(SimpleStatement(f"""
             UPDATE tickets_by_customer 
             SET status = '{new_status}' 
-            WHERE customer_id = '{table_data['tickets_by_customer']['customer_id']}' AND ticket_id = {ticket_id}
+            WHERE customer_id = {table_data['tickets_by_customer']['customer_id']} AND ticket_id = {ticket_id}
         """))
 
     if new_priority:
