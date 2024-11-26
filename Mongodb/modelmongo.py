@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import uuid
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 class User(BaseModel):
@@ -33,6 +33,33 @@ class User(BaseModel):
                 }
             }
         }
+
+
+class UpdateUser(BaseModel):
+    username: Optional[str]
+    email: Optional[str]
+    password: Optional[str]  # hashed
+    role: Optional[str]  # "customer" or "agent"
+    profile: Optional[dict] = Field(default=None)
+
+    class Config:
+        populate_by_name = True
+        json_schema_extra = {
+            "example": {
+                "username": "john_doe",
+                "email": "john.doe@example.com",
+                "password": "hashedpassword123",
+                "type": "customer",
+                "profile": {
+                    "name": "John Doe",
+                    "phone_number": "+123456789",
+                    "preferences": {"contact_channel": "email"},
+                    "profile_picture": "https://example.com/image.jpg"
+                }
+            }
+        }
+
+
 
 class Ticket(BaseModel):
     uuid: str = Field(alias="_uuid")
@@ -80,6 +107,12 @@ class Ticket(BaseModel):
                 "channel": "chat"
             }
         }
+
+
+class UpdateTicket(BaseModel):
+    status: Optional[str]  # Optional, allows updates to the status field
+    priority: Optional[str]  # Optional, allows updates to the priority field
+    resolution_steps: Optional[List[str]]  # Optional, allows updates to the resolution steps
 
 class AgentAssignment(BaseModel):
     uuid: str = Field(default_factory=uuid.uuid4, alias="_uuid")

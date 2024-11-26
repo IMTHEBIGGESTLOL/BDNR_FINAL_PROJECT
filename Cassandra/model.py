@@ -5,6 +5,9 @@ import time_uuid
 from cassandra.query import BatchStatement
 from datetime import datetime, timedelta
 from DGraph import modeldgraph
+import requests
+from bson import ObjectId  # Importa para manejar los ObjectId
+
 
 CREATE_KEYSPACE = """
         CREATE KEYSPACE IF NOT EXISTS {}
@@ -191,6 +194,17 @@ def create_schema(session):
     session.execute(CREATE_TICKET_COUNT_BY_CHANNEL_DATE_TABLE)
 
 def bulk_insert(session, dgraph_client, mongo_client):
+    base_url = "http://localhost:8003"  # Cambia el puerto si tu servidor usa otro
+    def convert_objectid(data):
+        if isinstance(data, list):
+            return [convert_objectid(item) for item in data]
+        elif isinstance(data, dict):
+            return {k: convert_objectid(v) for k, v in data.items()}
+        elif isinstance(data, ObjectId):
+            return str(data)
+        else:
+            return data
+
     # Prepare the insert statements for Cassandra
     ticket_by_date_stmt = session.prepare("INSERT INTO ticket_by_date (created_date, created_timestamp, ticket_id, customer_id, description, status) VALUES (?, ?, ?, ?, ?, ?)")
     activity_by_ticket_stmt = session.prepare("INSERT INTO activity_by_ticket (ticket_id, activity_timestamp, activity_type, status, agent_id) VALUES (?, ?, ?, ?, ?)")
@@ -222,12 +236,15 @@ def bulk_insert(session, dgraph_client, mongo_client):
 
     # Create agents and customers in the Users collection
     users_data = [
-        {"_uuid": agent_id, "username": f"agent_{i+1}", "role": "agent", "profile": {"name": f"Agent {i+1}"}} for i, agent_id in enumerate(agent_ids)
+        {"_uuid": f"{agent_id}_", "username": f"agent_{i+1}", "role": "agent", "profile": {"name": f"Agent {i+1}"}} for i, agent_id in enumerate(agent_ids)
     ] + [
         {"_uuid": customer_id, "username": f"customer_{i+1}", "role": "customer", "profile": {"name": f"Customer {i+1}"}} for i, customer_id in enumerate(customer_ids)
     ]
     users_collection.insert_many(users_data)
     
+    users_data_serializable = convert_objectid(users_data)
+    requests.post(f"{base_url}/users/", json=users_data_serializable)
+
     ticket_data = []
     for i, ticket_id in enumerate(ticket_ids):
         customer_id = random.choice(customer_ids)

@@ -12,4 +12,53 @@ handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(
 log.addHandler(handler)
 
 # Read env vars related to API connection
-BOOKS_API_URL = os.getenv("PROJECT_API_URL", "http://localhost:8000")
+PROJECT_API_URL = os.getenv("PROJECT_API_URL", "http://localhost:8003")
+
+def print_user(user):
+    for k in user.keys():
+        print(f"{k}: {user[k]}")
+    print("="*50)
+
+
+def get_user_by_id(id):
+    suffix = f"/users/{id}"
+    endpoint = PROJECT_API_URL + suffix
+    response = requests.get(endpoint)
+    print("hola")
+    if response.ok:
+        json_resp = response.json()
+        print_user(json_resp)
+    else:
+        print(f"Error: {response}")
+
+
+
+def main():
+    log.info(f"Welcome to books catalog. App requests to: {PROJECT_API_URL}")
+
+    parser = argparse.ArgumentParser()
+
+    list_of_actions = ["search", "get", "update", "delete"]
+    parser.add_argument("action", choices=list_of_actions, help="Action to be user for the books library")
+    parser.add_argument("-i", "--id", help="Provide a book ID which related to the book action", default=None)
+
+    args = parser.parse_args()
+
+    if args.id and not args.action in ["get", "update", "delete"]:
+        log.error(f"Can't use arg id with action {args.action}")
+        exit(1)
+
+    if args.action == "search":
+        print("hola")
+        #list_books(args.rating, args.pages, args.ratings_count, args.title, args.limit, args.skip)
+    elif args.action == "get" and args.id:
+        get_user_by_id(args.id)
+    elif args.action == "update" and args.id:
+        print("hola")
+        #update_book(args.id)
+    elif args.action == "delete" and args.id:
+        print("hola")
+        #delete_book(args.id)
+
+if __name__ == "__main__":
+    main()
