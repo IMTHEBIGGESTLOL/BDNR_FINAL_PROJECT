@@ -285,7 +285,7 @@ def bulk_insert(session, dgraph_client, mongo_client):
         #Data to mongoDB
         # Mongo: Insert into Tickets Collection
         ticket_document = {
-            "_uuid": ticket_id,
+            "uuid": ticket_id,
             "customer_id": customer_id,
             "description": f"Ticket {i+1} issue description",
             "status": random.choice(statuses),
@@ -293,33 +293,69 @@ def bulk_insert(session, dgraph_client, mongo_client):
             "created_timestamp": created_timestamp.isoformat(),
             "updated_timestamp": created_timestamp.isoformat(),
             "category": "technical",
-            "channel": random.choice(support_channels),
             "messages": [],
-            "feedback": {},
-            "resolution_steps": []
+            "feedback": {
+                "rating": None,
+                "comments": None,
+                "submitted_timestamp": None
+            },
+            "resolution_steps": [],
+            "channel": random.choice(support_channels)
         }
-        tickets_collection.insert_one(ticket_document)
+
 
         # Mongo: Insert into AgentAssignments Collection
         assignment_document = {
-            "_uuid": str(uuid.uuid4()),
+            "uuid": str(uuid.uuid4()),
             "agent_id": agent_id,
             "ticket_id": ticket_id,
             "assigned_timestamp": created_timestamp.isoformat(),
             "priority_level": ticket_document["priority"]
         }
-        agent_assignments_collection.insert_one(assignment_document)
+
+        
     
     # Generate and insert daily report
     daily_report = {
-        "_uuid": str(uuid.uuid4()),
+        "uuid": str(uuid.uuid4()),
         "report_date": datetime.now().date().isoformat(),
         "ticket_count": len(ticket_ids),
         "channel_stats": {
             channel: sum(1 for t in tickets_collection.find({"channel": channel})) for channel in support_channels
         }
     }
-    daily_reports_collection.insert_one(daily_report)
+    
+    ticket_document_serializable = [{
+        'uuid': str(ticket_document['uuid']),  # Convert uuid to string
+        'customer_id': str(ticket_document['customer_id']),  # Convert customer_id to string
+        'description': ticket_document['description'],
+        'status': ticket_document['status'],
+        'priority': ticket_document['priority'],
+        'created_timestamp': ticket_document['created_timestamp'],
+        'updated_timestamp': ticket_document['updated_timestamp'],
+        'category': ticket_document['category'],
+        'messages': ticket_document['messages'],
+        'feedback': ticket_document['feedback'],
+        'resolution_steps': ticket_document['resolution_steps'],
+        'channel': ticket_document['channel'],
+    }]
+    requests.post(f"{base_url}/tickets/", json=ticket_document_serializable)
+
+    daily_report_serializable = [convert_objectid(daily_report)]
+    response = requests.post(f"{base_url}/dailyReports/", json=daily_report_serializable)
+    if response.status_code == 422:
+        print(response.json())  # This will give you details about which field is causing the issue
+    
+    assignment_document_serializable = [{
+        'uuid': str(assignment_document['uuid']),  # Convert uuid to string
+        'agent_id': str(assignment_document['agent_id']),  # Convert customer_id to string
+        'ticket_id': str(assignment_document['ticket_id']),
+        'assigned_timestamp': assignment_document['assigned_timestamp'],
+        'priority_level': assignment_document['priority_level'],
+    }]    
+    response = requests.post(f"{base_url}/AgentAssignments/", json=assignment_document_serializable)
+    if response.status_code == 422:
+        print(response.json())  # This will give you details about which field is causing the issue
 
     # Execute the batch
     session.execute(batch)

@@ -21,35 +21,54 @@ async def create_users(users: List[User]):
 
 @router.post("/tickets/")
 async def create_tickets(tickets: List[Ticket]):
-    db.tickets.insert_many([ticket.dict(by_alias=True) for ticket in tickets])
+    db.tickets.insert_many([ticket.model_dump(by_alias=True) for ticket in tickets])
     return {"message": "Tickets added successfully"}
 
-@router.post("/agent_assignments/")
+@router.post("/AgentAssignments/")
 async def create_assignments(assignments: List[AgentAssignment]):
-    db.agent_assignments.insert_many([assignment.dict(by_alias=True) for assignment in assignments])
+    db.agent_assignments.insert_many([assignment.model_dump(by_alias=True) for assignment in assignments])
     return {"message": "Agent assignments added successfully"}
 
-@router.post("/daily_reports/")
+@router.post("/dailyReports/")
 async def create_daily_reports(reports: List[DailyReport]):
-    db.daily_reports.insert_many([report.dict(by_alias=True) for report in reports])
+    db.daily_reports.insert_many([report.model_dump(by_alias=True) for report in reports])
     return {"message": "Daily reports added successfully"} 
 
 
 
-# Get Users By Id
-@router.get("/users/{id}", response_description="Get User By Id", response_model=User)
-def find_user(id: str, request: Request):
-    print("hola")
-    if (user := request.app.database["users"].find_one({"_uuid": id})) is not None:
-        return user
-
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User with ID: {id} not found")
-
+# Showing all collections
 @router.get("/users/", response_model=List[User])
 async def get_users():
     users = list(db.users.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
     return users
 
+@router.get("/tickets/", response_model=List[Ticket])
+async def get_tickets():
+    tickets = list(db.tickets.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    return tickets
+
+@router.get("/dailyReports/", response_model=List[DailyReport])
+async def get_daily_Reports():
+    daily_reports = list(db.daily_reports.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    return daily_reports
+    
+@router.get("/AgentAssignments/", response_model=List[AgentAssignment])
+async def get_Agent_Assignments():
+    agent_assignments = list(db.agent_assignments.find({}, {"_id": 0}))  # Excluir el _id si no lo quieres en la respuesta
+    return agent_assignments
+
+
+# Search by Id in users
+@router.get("/users/{id}", response_description="Get a user by ID", response_model=List[User])
+async def get_users_id(id: str, request: Request):
+    if (user := list(db.users.find({"uuid": id}))) is not None:
+        return user
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Book with ID {id} not found")
+
+
+#Base URL
 @router.get("/")
 async def root():
     return {"message": "Welcome to the API! Access /users/ to manage users."}
+    

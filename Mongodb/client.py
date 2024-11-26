@@ -20,16 +20,23 @@ def print_user(user):
     print("="*50)
 
 
-def get_user_by_id(id):
-    suffix = f"/users/{id}"
+def get_user_by_id(user_id):
+    suffix = f"/users/{user_id}"
     endpoint = PROJECT_API_URL + suffix
     response = requests.get(endpoint)
-    print("hola")
+    print("hola justo en el get user")
     if response.ok:
         json_resp = response.json()
-        print_user(json_resp)
+        if isinstance(json_resp, list):  # Handle list response
+            if json_resp:  # Ensure the list is not empty
+                for user in json_resp:
+                    print_user(user)
+            else:
+                print("No user found with the provided ID.")
+        else:
+            print_user(json_resp)  # If the API unexpectedly returns a single dict
     else:
-        print(f"Error: {response}")
+        print(f"Error: {response.status_code} - {response.text}")
 
 
 
