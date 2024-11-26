@@ -113,6 +113,9 @@ def search_ticket(client, ticket_id): #QUERY DE STRING AND INCLUDES 2 NODES
         all(func: eq(ticket_id, $a)) {
             uid
             priority
+            created_by{
+                customer_id
+            }
         }
     }"""
 

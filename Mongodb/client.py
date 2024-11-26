@@ -180,7 +180,7 @@ def update_ticket(session, dgraph_client, agent_id):
     if response.ok:
         print("Ticket updated successfully:")
         # Llamar a funciones para actualizar Cassandra y Dgraph
-        update_ticket_in_cassandra(session, ticket_id, update_data, agent_id)
+        update_ticket_in_cassandra( dgraph_client ,session, ticket_id, update_data, agent_id)
         update_ticket_in_dgraph(dgraph_client, ticket_id, update_data)
         print_object(response.json())
     else:
@@ -191,41 +191,60 @@ from cassandra.query import SimpleStatement
 from cassandra.query import SimpleStatement
 from datetime import datetime
 
-def update_ticket_in_cassandra(session, ticket_id, updates, agent_id):
+def update_ticket_in_cassandra( dgraph_client,session, ticket_id, updates, agent_id):
     # Obtener las claves necesarias para cada tabla
+    ticket_data = modeldgraph.search_ticket(dgraph_client, ticket_id)
     ticket_id = int(ticket_id)  # Convertir ticket_id a entero
 
-    def fetch_ticket_row(table_name, ticket_id, additional_conditions=None):
-        base_query = f"SELECT * FROM {table_name} WHERE ticket_id = %s"
-        query_params = [ticket_id]
+    def fetch_ticket_row(table_name, conditions):
+        # Construir la consulta dependiendo de las claves primarias
+        base_query = f"SELECT * FROM {table_name} WHERE "
+        query_params = []
 
-        if additional_conditions:
-            for field, value in additional_conditions.items():
-                base_query += f" AND {field} = %s"
-                query_params.append(value)
-
-        base_query += " ALLOW FILTERING"
-
+        # Añadir las condiciones para la consulta basadas en las claves primarias y de agrupamiento
+        for field, value in conditions.items():
+            # Si el campo contiene "date", se usa un rango
+            if "assigned_date" in field:
+                base_query += f"{field} > %s AND "
+            elif isinstance(value, datetime) and "timestamp" in field:  # Si es un campo timestamp
+                base_query += f"{field} > %s AND "
+            else:
+                base_query += f"{field} = %s AND "
+            query_params.append(value)
+        base_query = base_query.rstrip(" AND ")  # Eliminar el último "AND" extra
+        input(f"{base_query}")
         result = session.execute(base_query, query_params)
+        input(f"{base_query}")
         row = result.one()
         if row:
             return dict(row._asdict())  # Convierte Row en diccionario
         else:
             return None
 
+    # Fecha límite para la comparación de timestamp (por ejemplo, todas las fechas mayores a 2000-01-01)
+    some_timestamp = datetime.now()  # Fecha y hora actual
+    some_date = some_timestamp.date()  # Solo la fecha
+    timestamp_limit = datetime(2000, 1, 1)  # Fecha límite para comparación de timestamp
+    date_limit = datetime(2000, 1, 1).date() 
+    #input(f"ticket: {ticket_id}, agent: {agent_id}, datelimit: {date_limit}, timestamp: {timestamp_limit}")
 
-    # Configuración de las tablas y condiciones adicionales necesarias
+    customer_id_value = ticket_data[0]['created_by']['customer_id']
+    #input(customer_id_value) 
+    priority = ticket_data[0]['priority']
+    customer_id_value = int(customer_id_value)
+
+    # Configuración de las tablas y condiciones necesarias
     tables_to_update = {
-        "ticket_by_date": {},
-        "tickets_by_agent_date": {"agent_id": agent_id},
-        "tickets_by_customer": {},
-        "urgent_tickets_by_time": {"agent_id": agent_id}
+        "ticket_by_date": {"ticket_id": ticket_id, "created_date": some_date, "created_timestamp": timestamp_limit},  # Para buscar fechas mayores a 2000-01-01
+        "tickets_by_agent_date": {"agent_id": agent_id, "ticket_id": ticket_id, "assigned_date": date_limit},
+        "tickets_by_customer": {"ticket_id": ticket_id, "customer_id": customer_id_value},
+        "urgent_tickets_by_time": { "priority": priority, "agent_id": agent_id, "ticket_id": ticket_id, "created_timestamp": some_date}
     }
 
     # Obtener los datos actuales de cada tabla
     table_data = {}
     for table, conditions in tables_to_update.items():
-        row = fetch_ticket_row(table, ticket_id, conditions)
+        row = fetch_ticket_row(table, conditions)
         if row:
             table_data[table] = row
         else:
@@ -252,7 +271,7 @@ def update_ticket_in_cassandra(session, ticket_id, updates, agent_id):
         update_queries.append(SimpleStatement(f"""
             UPDATE tickets_by_customer 
             SET status = '{new_status}' 
-            WHERE customer_id = {table_data['tickets_by_customer']['customer_id']} AND ticket_id = {ticket_id}
+            WHERE customer_id = {table_data['tickets_by_customer']['customer_id']} AND created_timestamp = '{table_data['tickets_by_customer']['created_timestamp']}'  AND ticket_id = {ticket_id}
         """))
 
     if new_priority:
@@ -263,8 +282,8 @@ def update_ticket_in_cassandra(session, ticket_id, updates, agent_id):
         """))
         session.execute("""
             DELETE FROM urgent_tickets_by_time 
-            WHERE priority = %s AND created_timestamp = %s AND ticket_id = %s
-        """, ( table_data['urgent_tickets_by_time']['priority'], table_data['urgent_tickets_by_time']['created_timestamp'], ticket_id))
+            WHERE priority = %s AND agent_id = %s AND ticket_id = %s AND created_timestamp = %s
+        """, (table_data['urgent_tickets_by_time']['priority'], agent_id, ticket_id, table_data['urgent_tickets_by_time']['created_timestamp']))
         update_queries.append(SimpleStatement(f"""
             INSERT INTO urgent_tickets_by_time (ticket_id, agent_id, created_timestamp, priority)
             VALUES ({ticket_id}, {agent_id}, '{table_data['urgent_tickets_by_time']['created_timestamp']}', '{new_priority}')
@@ -285,7 +304,7 @@ def update_ticket_in_cassandra(session, ticket_id, updates, agent_id):
         VALUES (%s, %s, %s, %s, %s)
     """
     for field, new_value in updates.items():
-        session.execute(activity_query, (ticket_id, datetime.now(), f"{field}_updated", new_value, agent_id))
+        session.execute(activity_query, (ticket_id, datetime.now(), f"updated", new_value, agent_id))
 
 
 def update_ticket_in_dgraph(dgraph_client, ticket_id, update_data):

@@ -76,7 +76,7 @@ CREATE_URGENT_TICKETS_BY_TIME_TABLE = """
         customer_id INT,
         description TEXT,
         agent_id INT,
-        PRIMARY KEY (priority, created_timestamp, ticket_id)
+        PRIMARY KEY (priority, agent_id, ticket_id, created_timestamp)
     );
 """
 
@@ -116,14 +116,14 @@ SELECT_TICKETS_BY_CUSTOMER = """
     SELECT ticket_id, customer_id, created_timestamp, status, priority
     FROM tickets_by_customer
     WHERE customer_id = ?
-    ORDER BY created_timestamp ASC
+    ORDER BY ticket_id ASC, created_timestamp ASC
 """
 
 SELECT_TICKETS_BY_DATE = """
     SELECT ticket_id, created_timestamp, customer_id, description, status
     FROM ticket_by_date
     WHERE created_date = ?
-    ORDER BY created_timestamp ASC
+    ORDER BY ticket_id ASC, created_timestamp ASC
 """
 
 SELECT_ACTIVITIES_BY_TICKET = """
@@ -131,14 +131,14 @@ SELECT_ACTIVITIES_BY_TICKET = """
     FROM activity_by_ticket
     WHERE ticket_id = ?
     AND agent_id = ?
-    ORDER BY activity_timestamp ASC
+    ORDER BY agent_id ASC, activity_timestamp ASC
 """
 
 SELECT_TICKETS_BY_AGENT_DATE = """
     SELECT assigned_date, ticket_id, priority, status, agent_id
     FROM tickets_by_agent_date
     WHERE agent_id = ?
-    ORDER BY ticket_id ASC
+    ORDER BY ticket_id ASC, assigned_date ASC
 """
 
 SELECT_FEEDBACK_BY_AGENT = """
@@ -161,7 +161,7 @@ SELECT_ESCALATIONS_BY_TICKET_ADMIN = """
     SELECT escalation_timestamp, escalation_level, agent_id, comments
     FROM escalation_by_ticket
     WHERE ticket_id = ?
-    ORDER BY escalation_timestamp ASC
+    ORDER BY agent_id ASC, escalation_timestamp ASC
 """
 #FOR AGENTS
 SELECT_ESCALATIONS_BY_TICKET_AGENT = """
@@ -169,7 +169,7 @@ SELECT_ESCALATIONS_BY_TICKET_AGENT = """
     FROM escalation_by_ticket
     WHERE ticket_id = ?
     AND agent_id = ?
-    ORDER BY escalation_timestamp ASC
+    ORDER BY agent_id ASC, escalation_timestamp ASC
 """
 
 SELECT_TICKET_COUNT_BY_CHANNEL_DATE = """
@@ -288,19 +288,17 @@ def bulk_insert(session, dgraph_client, mongo_client):
             "uuid": ticket_id,
             "customer_id": customer_id,
             "description": f"Ticket {i+1} issue description",
-            "status": random.choice(statuses),
-            "priority": random.choice(priorities),
+            "status": status,
+            "priority": priority,
             "created_timestamp": created_timestamp.isoformat(),
             "updated_timestamp": created_timestamp.isoformat(),
             "category": "technical",
             "messages": [],
             "feedback": {
-                "rating": None,
-                "comments": None,
-                "submitted_timestamp": None
+                "rating": feedback_rating
             },
             "resolution_steps": [],
-            "channel": random.choice(support_channels)
+            "channel": support_channel
         }
 
         ticket_document_serializable = [{
@@ -373,6 +371,7 @@ def get_user_tickets(session, customer_id):
     rows = session.execute(stmt, [customer_id])
     print("\n")
     for row in rows:
+        print("\n")
         print(f"=== Customer_id: {row.customer_id} ===")
         print(f"- Ticket_id: {row.ticket_id}")
         print(f"created on: {row.created_timestamp}")
