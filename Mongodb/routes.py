@@ -129,6 +129,28 @@ async def get_tickets():
     
     return tickets
 
+#GET TICKETS BY AGENT ID
+
+
+@router.get("/tickets/agent/{agent_id}")
+def get_tickets_by_agent(agent_id: str):
+    # Find the agent by ID
+    agent = db.agent_assignments.find_one({"uuid": agent_id})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    # Get the list of ticket IDs assigned to this agent
+    ticket_ids = agent.get("ticketid", [])
+    if not ticket_ids:
+        return {"message": "No tickets assigned to this agent"}
+
+    # Query the tickets collection
+    tickets = list(db.tickets.find({"uuid": {"$in": ticket_ids}}))
+    for ticket in tickets:
+        ticket["uuid"] = str(ticket["uuid"])  # Convert ObjectID to string
+    return {"tickets": tickets}
+
+
 # UPDATES
 
 # TICKET UPDATE STATUS OR PRIORITY
@@ -154,6 +176,29 @@ async def update_ticket(ticket_id: str, updates: dict):
     )
     
     return updated_ticket
+
+
+# AGGREGATIONS
+
+@router.get("/tickets/recent")
+async def get_recent_tickets(status: str, limit: int = 100):
+    pipeline = [
+        {"$match": {"status": status}},
+        {"$sort": {"created_timestamp": -1}},
+        {"$limit": limit}
+    ]
+    tickets = list(db.tickets.aggregate(pipeline))
+    return {"recent_tickets": tickets}
+
+@router.get("/tickets/{ticket_id}/escalations")
+async def get_escalations(ticket_id: str):
+    pipeline = [
+        {"$match": {"ticket_id": ObjectId(ticket_id)}},
+        {"$unwind": "$escalations"},
+        {"$sort": {"escalations.timestamp": 1}}
+    ]
+    escalations = list(db.tickets.aggregate(pipeline))
+    return {"escalations": escalations}
 
 
 

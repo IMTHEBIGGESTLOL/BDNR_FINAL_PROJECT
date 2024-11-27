@@ -222,6 +222,24 @@ def bulk_insert(session, dgraph_client, mongo_client):
     agent_assignments_collection = db["agent_assignments"]
     daily_reports_collection = db["daily_reports"]
 
+
+    # Indexes Creation
+    db.users.create_index("uuid", unique=True, name="user_id_unique_index")  
+    db.users.create_index("email", unique=True, name="email_unique_index")  
+
+    db.tickets.create_index("uuid", unique=True, name="ticket_id_unique_index")  
+    db.tickets.create_index("status", name="status_index")  
+    db.tickets.create_index("priority", name="priority_index")  
+    db.tickets.create_index("category", name="category_index")  
+
+    db.agent_assignments.create_index("agent_id", name="agent_id_index")  
+    db.agent_assignments.create_index("priority_level", name="priority_level_index") 
+
+    db.daily_reports.create_index("report_date", name="report_date_index")  
+
+    print("Indexes created successfully!")
+
+    
     # Data generation
     ticket_ids = [i for i in range(1, 11)]
     agent_ids = [i for i in range(1, 3)]
@@ -362,7 +380,12 @@ def bulk_insert(session, dgraph_client, mongo_client):
     
     # Insert data into Dgraph
     modeldgraph.create_data(dgraph_client, ticket_data, agent_ids, customer_ids)
+
     print("Bulk insert complete!")
+    
+
+
+
 
 
 #User the Tickets by Customer table, for usage on admin and customer
