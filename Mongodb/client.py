@@ -4,7 +4,7 @@ import logging
 import os
 import requests
 from datetime import datetime
-from DGraph import modeldgraph
+#from DGraph import modeldgraph
 
 # Set logger
 log = logging.getLogger()
@@ -16,21 +16,22 @@ log.addHandler(handler)
 # Read env vars related to API connection
 PROJECT_API_URL = os.getenv("PROJECT_API_URL", "http://localhost:8003")
 
+# FUNCTION TO PRINT ALL THE COLLECTIONS
 def print_object(objects):
-    if isinstance(objects, list):  # Handle lists of dictionaries
+    if isinstance(objects, list):  
         for obj in objects:
             if isinstance(obj, dict):
                 for k, v in obj.items():
                     print(f"{k}: {v}")
                 print("=" * 50)
-    elif isinstance(objects, dict):  # Handle a single dictionary
+    elif isinstance(objects, dict):  
         for k, v in objects.items():
             print(f"{k}: {v}")
         print("=" * 50)
     else:
         print("Unsupported object type.")
 
-
+# FUNCTION TO GET ALL USERS FOR OTHER FUNCTIONS
 def get_all_users():
     endpoint = f"{PROJECT_API_URL}/users"
     response = requests.get(endpoint)
@@ -43,7 +44,7 @@ def get_all_users():
     else:
         print(f"Error: {response.status_code} - {response.text}")
 
-
+# FUNCTION TO GET ALL CUSTOMERS FOR AGENTS
 def get_all_customers():
     endpoint = f"{PROJECT_API_URL}/users/customers"
     response = requests.get(endpoint)
@@ -56,9 +57,7 @@ def get_all_customers():
     else:
         print(f"Error: {response.status_code} - {response.text}")
 
-
-
-
+# GETTING ALL USERS
 def get_user():
     get_all_users()
     user_id = input("Enter the User ID to retrieve: ")
@@ -69,12 +68,12 @@ def get_user():
     if response.ok:
         user = response.json()
         print("User Details:")
-        print_object(user)  # Pass the user dictionary directly, not as a list
+        print_object(user)
     else:
         print(f"Error: {response.status_code} - {response.text}")
 
 
-
+# GETTING ALL CUSTOMERS
 def get_customer():
     get_all_customers()
     customer_id = input("Enter the Customer ID to retrieve: ")
@@ -90,22 +89,26 @@ def get_customer():
         print(f"Error: {response.status_code} - {response.text}")
 
 
+# FUNCTIONS TO SEARCH ALL TICKETS BY MULTIPLE FILTERS
+def search_ticket_by(agent_id):
+    # If no agent_id is provided, we prompt for it (assuming agent_id is required)
+    if agent_id is None:
+        agent_id = input("Enter your Agent ID: ")
 
+    # Call the function to get the tickets assigned to the agent
+    get_tickets_by_agent(agent_id)  # Show the tickets assigned to this agent
 
-
-def search_ticket_by():
-    suffix = '/nothing'
     print("Filter Options:")
     print("1. Customer ID")
     print("2. Status")
     print("3. Priority")
     filter_choice = input("Choose a filter Option (1-3): ")
 
-    if filter_choice == '1':  # Ensure that the input is a string, as input() returns a string
+    if filter_choice == '1':  
         customer_id = input("Insert CustomerId: ")
         suffix = f"/tickets/customerID/{customer_id}"
 
-    elif filter_choice == '2':  # Use elif to avoid checking the other conditions
+    elif filter_choice == '2': 
         print("Status Options:")
         print("1. Open")
         print("2. Resolved")
@@ -115,7 +118,7 @@ def search_ticket_by():
         status = status_map.get(status_choice, None)
         suffix = f"/tickets/status/{status}"
 
-    elif filter_choice == '3':  # Use elif for the last option
+    elif filter_choice == '3':  
         print("Priority Options:")
         print("1. High")
         print("2. Medium")
@@ -125,24 +128,95 @@ def search_ticket_by():
         priority = priority_map.get(priority_choice, None)
         suffix = f"/tickets/priority/{priority}"
 
-    # Send request based on the selected filter
+    # Append the agent's ticket filter
+    suffix += f"?agent_id={agent_id}"
+
+    # Send the request to the API endpoint
     endpoint = PROJECT_API_URL + suffix
     response = requests.get(endpoint)
+
     print("\nTickets:\n")
     if response.ok:
         json_resp = response.json()
-        if isinstance(json_resp, list):  # Handle list response
-            if json_resp:  # Ensure the list is not empty
+        if isinstance(json_resp, list):  
+            if json_resp:  
                 for ticket in json_resp:
                     print_object(ticket)
             else:
                 print("No ticket found with the provided filter.")
         else:
-            print_object(json_resp)  # If the API unexpectedly returns a single dict
+            print_object(json_resp)  
     else:
         print(f"Error: {response.status_code} - {response.text}")
 
 
+def search_ticket_admin_by():
+    suffix = '/nothing'
+    print("Filter Options:")
+    print("1. Customer ID")
+    print("2. Status")
+    print("3. Priority")
+    filter_choice = input("Choose a filter Option (1-3): ")
+
+    if filter_choice == '1':  
+        customer_id = input("Insert CustomerId: ")
+        suffix = f"/tickets/admins/customerID/{customer_id}"
+
+    elif filter_choice == '2': 
+        print("Status Options:")
+        print("1. Open")
+        print("2. Resolved")
+        print("3. In Progress")
+        status_choice = input("Choose a Status(1-3): ")
+        status_map = {'1': 'open', '2': 'resolved', '3': 'in_progress'}
+        status = status_map.get(status_choice, None)
+        suffix = f"/tickets/admins/status/{status}"
+
+    elif filter_choice == '3':  
+        print("Priority Options:")
+        print("1. High")
+        print("2. Medium")
+        print("3. Low")
+        priority_choice = input("Choose a Priority(1-3): ")
+        priority_map = {'1': 'high', '2': 'medium', '3': 'low'}
+        priority = priority_map.get(priority_choice, None)
+        suffix = f"/tickets/admins/priority/{priority}"
+
+    endpoint = PROJECT_API_URL + suffix
+    response = requests.get(endpoint)
+    print("\nTickets:\n")
+    if response.ok:
+        json_resp = response.json()
+        if isinstance(json_resp, list):  
+            if json_resp:  
+                for ticket in json_resp:
+                    print_object(ticket)
+            else:
+                print("No ticket found with the provided filter.")
+        else:
+            print_object(json_resp)  
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
+
+
+
+# FUNCTION FOR OTHER FUNCTIONS TO QUERY BY AGENTS TICKETS:
+def get_tickets_by_agent(agent_id):
+    suffix = f"/tickets/agent/{agent_id}"
+    endpoint = PROJECT_API_URL + suffix
+    response = requests.get(endpoint)
+    if response.ok:
+        tickets = response.json()
+        if tickets:
+            print(f"Tickets assigned to Agent {agent_id}:")
+            for ticket in tickets:
+                print(f"- Ticket ID: {ticket.get('uuid')}, Details: {ticket}")
+        else:
+            print(f"No tickets found for Agent {agent_id}.")
+    else:
+        print(f"Error: {response.status_code} - {response.text}")
+
+# FUNCTION TO UPDATE A TICKET ACROSS ALL DBS
 def update_ticket(session, dgraph_client, agent_id):
     ticket_id = input("Enter the Ticket ID to update: ")
     update_data = {}
@@ -171,7 +245,7 @@ def update_ticket(session, dgraph_client, agent_id):
         priority_map = {'1': 'high', '2': 'medium', '3': 'low'}
         update_data["priority"] = priority_map.get(priority_choice, None)
 
-    if not update_data:  # Ensure at least one field is being updated
+    if not update_data:  
         print("No valid updates provided. Exiting.")
         return
 
@@ -187,7 +261,6 @@ def update_ticket(session, dgraph_client, agent_id):
         print(f"Error: {response.status_code} - {response.text}")
 
 from cassandra.query import SimpleStatement
-
 from cassandra.query import SimpleStatement
 from datetime import datetime
 
@@ -336,3 +409,186 @@ def update_ticket_in_dgraph(dgraph_client, ticket_id, update_data):
         print(f"Ticket {ticket_id} actualizado en Dgraph.")
     except Exception as e:
         print(f"Error al actualizar el ticket en Dgraph: {e}")
+
+
+# FUNCTIONS FOR AGGREGATIONS
+def fetch_recent_admin_tickets():
+    url = f"{PROJECT_API_URL}/tickets/admins/recent"
+    print("Status Options:")
+    print("1. Open")
+    print("2. Resolved")
+    print("3. In Progress")
+    status_choice = input("Choose a Status(1-3): ")
+    status_map = {'1': 'open', '2': 'resolved', '3': 'in_progress'}
+    status = status_map.get(status_choice)
+
+    if status is None:
+        print("Invalid status choice")
+        return
+
+    params = {"status": status}  # Send the status as a query parameter
+    response = requests.get(url, params=params)
+
+    if response.status_code == 200:
+        tickets = response.json()
+        for ticket in tickets:
+            print(ticket)
+            print("=" * 50)
+
+    else:
+        print(f"Error fetching recent tickets: {response.status_code} - {response.text}")
+
+
+def fetch_recent_tickets(agent_id):
+    url = f"{PROJECT_API_URL}/tickets/recent"
+    print("Status Options:")
+    print("1. Open")
+    print("2. Resolved")
+    print("3. In Progress")
+    status_choice = input("Choose a Status(1-3): ")
+    status_map = {'1': 'open', '2': 'resolved', '3': 'in_progress'}
+    status = status_map.get(status_choice)
+
+    if status is None:
+        print("Invalid status choice")
+        return
+
+    params = {"status": status, "agent_id": agent_id}  # Send the status as a query parameter
+    response = requests.get(url, params=params)
+
+    if response.status_code == 200:
+        tickets = response.json()
+        for ticket in tickets:
+            print(ticket)
+            print("=" * 50)
+
+    else:
+        print(f"Error fetching recent tickets: {response.status_code} - {response.text}")
+
+
+
+def fetch_tickets_by_prioritylevels(agent_id):
+    url = f"{PROJECT_API_URL}/tickets/priority_level"
+
+
+    params = {"agent_id": agent_id}  # Send the status as a query parameter
+    response = requests.get(url, params=params)
+
+    if response.status_code == 200:
+        tickets = response.json()
+        for ticket in tickets:
+            print(ticket)
+            print("=" * 50)
+
+    else:
+        print(f"Error fetching recent tickets: {response.status_code} - {response.text}")
+
+
+
+def fetch_tickets_admin_by_prioritylevels():
+    url = f"{PROJECT_API_URL}/tickets/admins/priority_level"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        tickets = response.json()
+        for ticket in tickets:
+            print(ticket)
+            print("=" * 50)
+    else:
+        print(f"Error fetching recent tickets: {response.status_code} - {response.text}")
+
+
+def get_ticket_feedback(agent_id):
+    get_tickets_by_agent(agent_id)  
+    try:
+        ticket_uuid = input("Enter Desired Ticket ID: ")
+        url = f"{PROJECT_API_URL}/tickets/{ticket_uuid}/feedback?agent_id={agent_id}"  
+        
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            feedback = response.json()
+            print("Ticket Feedback:")
+            print(f"Rating: {feedback.get('rating')}")
+            print(f"Comments: {feedback.get('comments')}")
+            print(f"Submitted Timestamp: {feedback.get('submitted_timestamp')}")
+            print("=" * 50)
+
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+def get_ticket_admin_feedback():
+    try:
+        ticket_uuid = input("Enter desired Ticket ID: ")
+        url = f"{PROJECT_API_URL}/tickets/admins/{ticket_uuid}/feedback"  
+        
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            feedback = response.json()
+            print("Ticket Feedback:")
+            print(f"Rating: {feedback.get('rating')}")
+            print(f"Comments: {feedback.get('comments')}")
+            print(f"Submitted Timestamp: {feedback.get('submitted_timestamp')}")
+            print("=" * 50)
+
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    
+def add_message_to_ticket(customer_id):
+    ticket_uuid = input("Please enter the Ticket ID you want to add your message to: ")
+    message_text = input("Enter your message: ")
+
+    # Define the URL for adding a message to the ticket
+    url = f"{PROJECT_API_URL}/tickets/{ticket_uuid}/messages?customer_id={customer_id}"
+
+    # Prepare the payload with the message text
+    payload = {"text": message_text}
+
+    try:
+        # Send the POST request to the FastAPI route
+        response = requests.post(url, json=payload)
+
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Print the response message
+            result = response.json()
+            print(result["message"])
+            print(f"New message added: {result['new_message']}")
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+
+def fetch_daily_report(report_date):
+    url = f"{PROJECT_API_URL}/daily_reports/{report_date}"
+
+    try:
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            report = response.json()
+
+            print(f"Daily Report for {report_date}")
+            print(f"UUID: {report['uuid']}")
+            print(f"Ticket Count: {report['ticket_count']}")
+            print("Channel Stats:")
+            for channel, count in report["channel_stats"].items():
+                print(f"  {channel.capitalize()}: {count}")
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+if __name__ == "__main__":
+    fetch_daily_report()

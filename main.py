@@ -97,7 +97,8 @@ def print_customer_menu():
     menu_options = {
         1: "See my tickets",
         2: "Search my comments",
-        3: "Log Out"
+        3: "Add message to Ticket",
+        4: "Log Out"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -111,7 +112,11 @@ def print_admin_menu():
         5: "Search tickets by filter",
         6: "Update Status and/or Priority Tickets",
         7: "See Users by ID",
-        8: "Logout"
+        8: "Most Recent Tickets by Status(Most Recet at the Top)",
+        9: "See tickets by Priority Level",
+        10: "See feedback on tikcets",
+        11: "Daily Multi-Channel Report",
+        12: "Logout"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -125,7 +130,11 @@ def print_agent_menu():
         5: "Search tickets by filter",
         6: "Update Status and/or Priority Tickers",
         7: "See Customers by ID",
-        8: "Log Out"
+        8: "Most Recent Tickets by Status(Most Recet at the Top)",
+        9: "See my assigned tickets (MongoDB)",
+        10: "See tickets by Priority Level",
+        11: "See feedback on my tikcets",
+        12: "Log Out"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -169,6 +178,8 @@ def menu_handler():
                         keyword = input("Keyword to search: ")
                         modeldgraph.search_messages_by_keyword(dgraph_client, keyword)
                     if choice_2 == 3:
+                        mdb_functions.add_message_to_ticket(customer_id)
+                    if choice_2 == 4:
                         print("Logging out")
                         break
             if role == 'agent':
@@ -198,12 +209,20 @@ def menu_handler():
                         ticket_id = int(input("Insert ticket id you want to search: "))
                         model.get_activities_by_ticket(cassandra_session, ticket_id, agent_id)
                     elif choice_2 == 5:
-                        mdb_functions.search_ticket_by()
+                        mdb_functions.search_ticket_by(agent_id)
                     elif choice_2 == 6:
                         mdb_functions.update_ticket(cassandra_session, dgraph_client, agent_id) 
                     elif choice_2 == 7:
                         mdb_functions.get_customer() 
                     elif choice_2 == 8:
+                        mdb_functions.fetch_recent_tickets(agent_id)
+                    elif choice_2 == 9:
+                        mdb_functions.get_tickets_by_agent(agent_id)
+                    elif choice_2 == 10:
+                        mdb_functions.fetch_tickets_by_prioritylevels(agent_id)
+                    elif choice_2 == 11:
+                        mdb_functions.get_ticket_feedback(agent_id)
+                    elif choice_2 == 12:
                         print("Logging out...")
                         break
 
@@ -232,12 +251,22 @@ def menu_handler():
                         date = datetime.strptime(date, '%Y-%m-%d')
                         model.get_daily_channel_report(cassandra_session, date, channel)
                     if choice_2 == 5:
-                        mdb_functions.search_ticket_by()
+                        mdb_functions.search_ticket_admin_by()
                     elif choice_2 == 6:
                         mdb_functions.update_ticket(cassandra_session, dgraph_client, agent_id)
                     elif choice_2 == 7:
                         mdb_functions.get_user() 
                     elif choice_2 == 8:
+                        mdb_functions.fetch_recent_admin_tickets() 
+                    elif choice_2 == 9:
+                        mdb_functions.fetch_tickets_admin_by_prioritylevels()
+                    elif choice_2 == 10:
+                        mdb_functions.get_ticket_admin_feedback() 
+                    elif choice_2 == 11:
+                        date = input("Enter date to search (YYYY-MM-DD): ")
+                        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                        mdb_functions.fetch_daily_report(date_obj)
+                    elif choice_2 == 12:
                         print("Logging out...")
                         break
             #get_cassandra_username

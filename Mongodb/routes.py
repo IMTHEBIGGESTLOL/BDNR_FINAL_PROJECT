@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-from fastapi import APIRouter, Body, Request, Response, HTTPException, status
+from fastapi import APIRouter, Body, Request, Response, HTTPException, status, Query, Body
 from fastapi.encoders import jsonable_encoder
 from typing import List
+from pydantic import BaseModel
 from pymongo import MongoClient
 from pymongo import ReturnDocument
+from pymongo.collection import Collection
 import requests
+from typing import List, Dict, Any
+from datetime import datetime
+
 
 from .modelmongo import User, Ticket, AgentAssignment, DailyReport, UpdateUser, UpdateTicket
 
@@ -95,8 +100,62 @@ async def get_customer_by_id(id: str, request: Request):
 
 
 
-# ROUTES FOR FILTER IN TICKETS
+# ROUTES FOR FILTER IN TICKETS (agents)
 @router.get("/tickets/customerID/{customer_id}", response_description="Get Ticket by customer ID", response_model=List[Ticket])
+async def get_tickets_custID(customer_id: str, agent_id: str, request: Request):
+    agents = list(db.agent_assignments.find({"agent_id": agent_id}))
+    if not agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    ticket_ids = [assignment.get("ticket_id") for assignment in agents]
+    if not ticket_ids:
+        return {"message": "No tickets assigned to this agent"}
+
+    tickets = list(db.tickets.find({"customer_id": customer_id, "uuid": {"$in": ticket_ids}}, {"_id": 0}))
+    if not tickets:
+        raise HTTPException(status_code=404, detail=f"No tickets found for Customer ID: {customer_id} assigned to Agent {agent_id}.")
+
+    return tickets
+
+@router.get("/tickets/status/{status}", response_description="Get a ticket by their Status", response_model=List[Ticket])
+async def get_tickets_status(status: str, agent_id: str, request: Request):
+    # Find agent assignments
+    agents = list(db.agent_assignments.find({"agent_id": agent_id}))
+    if not agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Extract ticket IDs assigned to the agent
+    ticket_ids = [assignment.get("ticket_id") for assignment in agents]
+    if not ticket_ids:
+        return {"message": "No tickets assigned to this agent"}
+
+    # Find tickets by status and agent assignment
+    tickets = list(db.tickets.find({"status": status, "uuid": {"$in": ticket_ids}}, {"_id": 0}))
+    if not tickets:
+        raise HTTPException(status_code=404, detail=f"No tickets found with status: {status} assigned to Agent {agent_id}.")
+
+    return tickets
+
+
+@router.get("/tickets/priority/{priority}", response_description="Get a ticket by their priority", response_model=List[Ticket])
+async def get_tickets_priority(priority: str, agent_id: str, request: Request):
+    agents = list(db.agent_assignments.find({"agent_id": agent_id}))
+    if not agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    ticket_ids = [assignment.get("ticket_id") for assignment in agents]
+    if not ticket_ids:
+        return {"message": "No tickets assigned to this agent"}
+
+    tickets = list(db.tickets.find({"priority": priority, "uuid": {"$in": ticket_ids}}, {"_id": 0}))
+    if not tickets:
+        raise HTTPException(status_code=404, detail=f"No tickets found with priority: {priority} assigned to Agent {agent_id}.")
+
+    return tickets
+
+
+# ROUTES FOR FILTER IN TICKETS (admins)
+@router.get("/tickets/admins/customerID/{customer_id}", response_description="Get Ticket by customer ID", response_model=List[Ticket])
 async def get_tickets_custID(customer_id: str, request: Request):
     tickets = list(db.tickets.find({"customer_id": customer_id}))
     if tickets is None:
@@ -104,7 +163,7 @@ async def get_tickets_custID(customer_id: str, request: Request):
     
     return tickets
 
-@router.get("/tickets/status/{status}", response_description="Get a ticket by their Status", response_model=List[Ticket])
+@router.get("/tickets/admins/status/{status}", response_description="Get a ticket by their Status", response_model=List[Ticket])
 async def get_tickets_status(status: str, request: Request):
     tickets = list(db.tickets.find({"status": status}))
     if tickets is None:
@@ -112,7 +171,7 @@ async def get_tickets_status(status: str, request: Request):
     
     return tickets
 
-@router.get("/tickets/priority/{priority}", response_description="Get a ticket by their priority", response_model=List[Ticket])
+@router.get("/tickets/admins/priority/{priority}", response_description="Get a ticket by their priority", response_model=List[Ticket])
 async def get_tickets_priority(priority: str, request: Request):
     tickets = list(db.tickets.find({"priority": priority}))
     if tickets is None:
@@ -128,28 +187,6 @@ async def get_tickets():
         raise HTTPException(status_code=404, detail=f"No tickets")
     
     return tickets
-
-#GET TICKETS BY AGENT ID
-
-
-@router.get("/tickets/agent/{agent_id}")
-def get_tickets_by_agent(agent_id: str):
-    # Find the agent by ID
-    agent = db.agent_assignments.find_one({"uuid": agent_id})
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    # Get the list of ticket IDs assigned to this agent
-    ticket_ids = agent.get("ticketid", [])
-    if not ticket_ids:
-        return {"message": "No tickets assigned to this agent"}
-
-    # Query the tickets collection
-    tickets = list(db.tickets.find({"uuid": {"$in": ticket_ids}}))
-    for ticket in tickets:
-        ticket["uuid"] = str(ticket["uuid"])  # Convert ObjectID to string
-    return {"tickets": tickets}
-
 
 # UPDATES
 
@@ -179,28 +216,223 @@ async def update_ticket(ticket_id: str, updates: dict):
 
 
 # AGGREGATIONS
+@router.get("/tickets/admins/recent", response_model=List[Dict[str, Any]])
+def get_recent_tickets(status, limit: int = 3):
 
-@router.get("/tickets/recent")
-async def get_recent_tickets(status: str, limit: int = 100):
-    pipeline = [
-        {"$match": {"status": status}},
-        {"$sort": {"created_timestamp": -1}},
-        {"$limit": limit}
-    ]
-    tickets = list(db.tickets.aggregate(pipeline))
-    return {"recent_tickets": tickets}
+    try:
+        pipeline = [
+            {"$match": {"status": status}},
+            {"$sort": {"created_timestamp": 1}},
+            {"$limit": limit},
+            {"$project": {"_id": 0, "uuid": 1, "status": 1, "created_timestamp": 1}}
+        ]
+        result = list(db.tickets.aggregate(pipeline))
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching recent tickets: {str(e)}")
 
-@router.get("/tickets/{ticket_id}/escalations")
-async def get_escalations(ticket_id: str):
-    pipeline = [
-        {"$match": {"ticket_id": ObjectId(ticket_id)}},
-        {"$unwind": "$escalations"},
-        {"$sort": {"escalations.timestamp": 1}}
-    ]
-    escalations = list(db.tickets.aggregate(pipeline))
-    return {"escalations": escalations}
+@router.get("/tickets/recent", response_model=List[Dict[str, Any]])
+def get_recent_tickets(status, agent_id: str, limit: int = 3):
+
+    try:
+        pipeline = [
+            {"$match": {"status": status}}, 
+            {"$sort": {"created_timestamp": -1}},  
+            {"$limit": limit},  
+            {"$lookup": {  
+                "from": "agent_assignments",
+                "localField": "uuid",
+                "foreignField": "ticket_id",
+                "as": "assigned_agents"
+            }},
+            {"$match": {"assigned_agents.agent_id": agent_id}},
+            {"$project": {"_id": 0, "uuid": 1, "status": 1, "created_timestamp": 1}}
+        ]
+        result = list(db.tickets.aggregate(pipeline))
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching recent tickets: {str(e)}")
+
+@router.get("/tickets/priority_level", response_model=List[Dict[str, Any]])
+def fetch_tickets_by_prioritylevels(agent_id: str, limit: int = 3):
+
+    try:
+        pipeline = [
+            {"$lookup": {
+                "from": "agent_assignments",
+                "localField": "uuid",
+                "foreignField": "ticket_id",
+                "as": "assigned_agents"
+            }},
+            {"$match": {"assigned_agents.agent_id": agent_id}},  
+            {"$addFields": {
+                "priority_sort_order": {
+                    "$switch": {  
+                        "branches": [
+                            {"case": {"$eq": ["$priority", "high"]}, "then": 1},
+                            {"case": {"$eq": ["$priority", "medium"]}, "then": 2},
+                            {"case": {"$eq": ["$priority", "low"]}, "then": 3}
+                        ],
+                        "default": 4 
+                    }
+                }
+            }},
+            {"$sort": {"priority_sort_order": 1, "created_timestamp": -1}}, 
+            {"$limit": limit}, 
+            {"$project": {"_id": 0, "uuid": 1, "priority": 1, "status": 1, "created_timestamp": 1}}  
+        ]
+
+        result = list(db.tickets.aggregate(pipeline))
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching recent tickets: {str(e)}")
 
 
+@router.get("/tickets/admins/priority_level", response_model=List[Dict[str, Any]])
+def fetch_tickets_admins_by_prioritylevels(limit: int = 6):
+
+    try:
+        pipeline = [
+            {"$addFields": {
+                "priority_sort_order": {
+                    "$switch": { 
+                        "branches": [
+                            {"case": {"$eq": ["$priority", "high"]}, "then": 1},
+                            {"case": {"$eq": ["$priority", "medium"]}, "then": 2},
+                            {"case": {"$eq": ["$priority", "low"]}, "then": 3}
+                        ],
+                        "default": 4  
+                    }
+                }
+            }},
+            {"$lookup": {
+                "from": "agent_assignments",  
+                "localField": "uuid", 
+                "foreignField": "ticket_id", 
+                "as": "agent_info" 
+            }},
+            {"$unwind": "$agent_info"},
+
+            {"$sort": {"priority_sort_order": 1, "created_timestamp": 1}}, 
+            {"$limit": limit}, 
+            {"$project": {"_id": 0, "uuid": 1, "priority": 1, "agent_id": "$agent_info.agent_id", "status": 1, "created_timestamp": 1}} 
+        ]
+
+        result = list(db.tickets.aggregate(pipeline))
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching recent tickets: {str(e)}")
+
+
+# HELP TO QUERY TICKETS GIVEN TO AGENTS
+@router.get("/tickets/agent/{agent_id}")
+def get_tickets_by_agent(agent_id: str):
+    agents = list(db.agent_assignments.find({"agent_id": agent_id}))
+    if not agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    ticket_ids = [assignment.get("ticket_id") for assignment in agents]
+    if not ticket_ids:
+        return {"message": "No tickets assigned to this agent"}
+
+    tickets = list(db.tickets.find({"uuid": {"$in": ticket_ids}}, {"_id": 0, "uuid": 1, "status":1, "priority":1}))
+    return tickets
+
+
+
+# RETRIEVE TICKET FEEDBACK
+@router.get("/tickets/{ticket_uuid}/feedback", response_model=Dict[str, Any])
+async def get_ticket_feedback(ticket_uuid: str, agent_id: str = None):
+    if not agent_id:
+        raise HTTPException(status_code=422, detail="Agent ID is required")
+
+    # Check if the agent has any ticket assignments
+    agents = list(db.agent_assignments.find({"agent_id": agent_id}))
+    if not agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    ticket_ids = [assignment.get("ticket_id") for assignment in agents]
+    if not ticket_ids:
+        return {"message": "No tickets assigned to this agent"}
+
+    try:
+        # Retrieve the ticket feedback from the tickets collection
+        ticket = db.tickets.find_one({"uuid": ticket_uuid, "uuid": {"$in": ticket_ids}}, {"_id": 0, "feedback": 1})
+
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        # Return the feedback
+        return ticket.get("feedback", {})
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving ticket feedback: {str(e)}")
+
+
+@router.get("/tickets/admins/{ticket_uuid}/feedback", response_model=Dict[str, Any])
+async def get_ticket_feedback(ticket_uuid: str):
+    try:
+        ticket = db.tickets.find_one({"uuid": ticket_uuid}, {"_id": 0, "feedback": 1})
+
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        return ticket.get("feedback", {})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving ticket feedback: {str(e)}")
+
+
+
+class MessageRequest(BaseModel):
+    text: str
+
+@router.post("/tickets/{ticket_uuid}/messages", response_model=Dict[str, Any])
+async def add_message_to_ticket(ticket_uuid: str, customer_id: str, message: MessageRequest = Body(...)):
+    try:
+        # Find the ticket by ticket_uuid and check if it belongs to the customer
+        ticket = db.tickets.find_one({"uuid": ticket_uuid, "customer_id": customer_id})
+        
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found or does not belong to this customer")
+
+        # Get the current timestamp for the message
+        timestamp = datetime.utcnow().isoformat()
+
+        # Create the new message
+        new_message = {
+            "sender_id": customer_id,
+            "timestamp": timestamp,
+            "message_text": message.text
+        }
+
+        # Add the new message to the existing messages list
+        db.tickets.update_one(
+            {"uuid": ticket_uuid},
+            {"$push": {"messages": new_message}}
+        )
+
+        # Return the updated ticket with the new message added
+        return {"message": "Message added successfully", "ticket_uuid": ticket_uuid, "new_message": new_message}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error adding message to ticket: {str(e)}")
+
+@router.get("/daily_reports/{report_date}", response_model=DailyReport)
+async def get_daily_report(report_date: str):
+    try:
+        # Find the daily report by date
+        report = db.daily_reports.find_one({"report_date": report_date}, {"_id": 0})
+        
+        if not report:
+            raise HTTPException(status_code=404, detail="Daily report not found for the given date")
+        
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching daily report: {str(e)}")
 
 
 #Base URL
