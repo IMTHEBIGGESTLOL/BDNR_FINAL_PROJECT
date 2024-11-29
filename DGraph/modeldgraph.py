@@ -5,7 +5,7 @@ import pandas as pd
 from tabulate import tabulate
 
 import pydgraph
-
+i = 10
 def set_schema(client):
     schema = """
     type User {
@@ -89,8 +89,36 @@ def create_data(client, ticket_data, agent_ids, customer_ids):
     finally:
         txn.discard()
 
+def create_message(client, message_data, customer_id, ticket_id):
+    txn = client.txn()
+    ticket_data = search_ticket(client, ticket_id)
+    try:
+        # Create the message
+        message_data = {
+            'uid': '_:new_message',
+            'dgraph.type': 'Message',
+            'sender': {'uid': f'_:customer{customer_id}'},
+            'message_text': message_data,
+            'timestamp': datetime.now().isoformat(),
+            'belongs_to': {'uid': ticket_data[0]['uid']}
+        }
 
-def search_user(client, username): #QUERY DE STRING AND INCLUDES 2 NODES
+        # new mutation
+        ticket_update = {
+            
+        }
+
+        #Add to the mutation the update statements for the ticket
+        ticket_update['uid'] = ticket_data[0]['uid']
+        ticket_update['messages'] =  {'uid': '_:new_message'}
+        # Execute the mutations
+        txn.mutate(set_obj=[message_data, ticket_update], commit_now=True)
+        print("Message created and added to the ticket")
+
+    finally:
+        txn.discard()
+
+def search_user(client, username): 
     query = """query search_person($a: string) {
         all(func: eq(username, $a)) {
             username
@@ -108,7 +136,7 @@ def search_user(client, username): #QUERY DE STRING AND INCLUDES 2 NODES
     # return results.
     return ppl['all']
 
-def search_ticket(client, ticket_id): #QUERY DE STRING AND INCLUDES 2 NODES
+def search_ticket(client, ticket_id): 
     query = """query search_person($a: string) {
         all(func: eq(ticket_id, $a)) {
             uid

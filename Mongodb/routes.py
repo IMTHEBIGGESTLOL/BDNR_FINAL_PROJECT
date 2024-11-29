@@ -16,14 +16,13 @@ from typing import Dict, Optional
 
 router = APIRouter()
 
-# Configura la conexión a MongoDB
+# MongoDB conection
 client = MongoClient("mongodb://localhost:27017/")
 db = client["final_project"]
 
 # DATA INSERT TO UVICORN:
 @router.post("/users/")
 async def create_users(users: List[User]):
-    # Usa model_dump en lugar de dict
     db.users.insert_many([user.model_dump(by_alias=True) for user in users])
     return {"message": "Users added successfully"}
 
@@ -112,7 +111,7 @@ async def get_tickets_custID(customer_id: str, agent_id: str, request: Request):
     if not ticket_ids:
         return {"message": "No tickets assigned to this agent"}
 
-    tickets = list(db.tickets.find({"customer_id": customer_id, "uuid": {"$in": ticket_ids}}, {"_id": 0}))
+    tickets = list(db.tickets.find({"customer_id": customer_id, "uuid": {"$in": ticket_ids}}, {"_id": 0, "messages":0, "created_timestamp": 0}))
     if not tickets:
         raise HTTPException(status_code=404, detail=f"No tickets found for Customer ID: {customer_id} assigned to Agent {agent_id}.")
 
@@ -131,7 +130,7 @@ async def get_tickets_status(status: str, agent_id: str, request: Request):
         return {"message": "No tickets assigned to this agent"}
 
     # Find tickets by status and agent assignment
-    tickets = list(db.tickets.find({"status": status, "uuid": {"$in": ticket_ids}}, {"_id": 0}))
+    tickets = list(db.tickets.find({"status": status, "uuid": {"$in": ticket_ids}}, {"_id": 0, "messages": 0, "created_timestamp": 0}))
     if not tickets:
         raise HTTPException(status_code=404, detail=f"No tickets found with status: {status} assigned to Agent {agent_id}.")
 
@@ -148,7 +147,7 @@ async def get_tickets_priority(priority: str, agent_id: str, request: Request):
     if not ticket_ids:
         return {"message": "No tickets assigned to this agent"}
 
-    tickets = list(db.tickets.find({"priority": priority, "uuid": {"$in": ticket_ids}}, {"_id": 0}))
+    tickets = list(db.tickets.find({"priority": priority, "uuid": {"$in": ticket_ids}}, {"_id": 0, "messages":0, "created_timestamp": 0}))
     if not tickets:
         raise HTTPException(status_code=404, detail=f"No tickets found with priority: {priority} assigned to Agent {agent_id}.")
 
@@ -210,6 +209,7 @@ async def update_ticket(ticket_id: str, updates: dict):
     updated_ticket = db.tickets.find_one_and_update(
         {"uuid": ticket_id},
         {"$set": updates},
+        {"$project": {"_id": 0, "uuid": 1, "status": 1, "created_timestamp": 1, "messages": 0}},
         return_document=ReturnDocument.AFTER
     )
     
@@ -280,7 +280,7 @@ def fetch_tickets_by_prioritylevels(agent_id: str, limit: int = 3):
             }},
             {"$sort": {"priority_sort_order": 1, "created_timestamp": -1}}, 
             {"$limit": limit}, 
-            {"$project": {"_id": 0, "uuid": 1, "priority": 1, "status": 1, "created_timestamp": 1}}  
+            {"$project": {"_id": 0, "uuid": 1, "priority": 1, "status": 1, "created_timestamp": 1, "messages":0}}  
         ]
 
         result = list(db.tickets.aggregate(pipeline))
@@ -318,7 +318,7 @@ def fetch_tickets_admins_by_prioritylevels(limit: int = 6):
 
             {"$sort": {"priority_sort_order": 1, "created_timestamp": 1}}, 
             {"$limit": limit}, 
-            {"$project": {"_id": 0, "uuid": 1, "priority": 1, "agent_id": "$agent_info.agent_id", "status": 1, "created_timestamp": 1}} 
+            {"$project": {"_id": 0, "uuid": 1, "priority": 1, "agent_id": "$agent_info.agent_id", "status": 1, "created_timestamp": 1, "messages":0}} 
         ]
 
         result = list(db.tickets.aggregate(pipeline))
@@ -340,7 +340,7 @@ def get_tickets_by_agent(agent_id: str):
     if not ticket_ids:
         return {"message": "No tickets assigned to this agent"}
 
-    tickets = list(db.tickets.find({"uuid": {"$in": ticket_ids}}, {"_id": 0, "uuid": 1, "status":1, "priority":1}))
+    tickets = list(db.tickets.find({"uuid": {"$in": ticket_ids}}, {"_id": 0, "uuid": 1, "status":1, "priority":1, "messages":0, "created_timestamp": 0}))
     return tickets
 
 
@@ -360,7 +360,7 @@ async def get_ticket_feedback(ticket_uuid: str, agent_id: str = None):
         return {"message": "No tickets assigned to this agent"}
 
     try:
-        ticket = db.tickets.find_one({"uuid": ticket_uuid, "uuid": {"$in": ticket_ids}}, {"_id": 0, "feedback": 1})
+        ticket = db.tickets.find_one({"uuid": ticket_uuid, "uuid": {"$in": ticket_ids}}, {"_id": 0, "feedback": 1, "messages":0, "created_timestamp": 0})
 
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
@@ -374,7 +374,7 @@ async def get_ticket_feedback(ticket_uuid: str, agent_id: str = None):
 @router.get("/tickets/admins/{ticket_uuid}/feedback", response_model=Dict[str, Any])
 async def get_ticket_feedback(ticket_uuid: str):
     try:
-        ticket = db.tickets.find_one({"uuid": ticket_uuid}, {"_id": 0, "feedback": 1})
+        ticket = db.tickets.find_one({"uuid": ticket_uuid}, {"_id": 0, "feedback": 1, "messages":0, "created_timestamp": 0})
 
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
@@ -527,7 +527,7 @@ async def delete_ticket(ticket_id: str):
 async def get_tickets_by_customer(customer_id: str):
 
     try:
-        tickets = list(db.tickets.find({"customer_id": customer_id}, {"_id": 0}))
+        tickets = list(db.tickets.find({"customer_id": customer_id}, {"_id": 0, "messages":0, "created_timestamp": 0}))
 
         if not tickets:
             raise HTTPException(status_code=404, detail="No tickets found for this customer.")

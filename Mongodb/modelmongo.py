@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 class User(BaseModel):
     uuid: str = Field(...)
     username: str = Field(...)
-    email: str = Field(...)  # Email es opcional
+    email: str = Field(...)  
     role: str = Field(...)  # "customer" or "agent"
     profile: dict = Field({
         "name": None

@@ -6,7 +6,7 @@ from cassandra.query import BatchStatement
 from datetime import datetime, timedelta
 from DGraph import modeldgraph
 import requests
-from bson import ObjectId  # Importa para manejar los ObjectId
+from bson import ObjectId  # Manage objectID 
 
 
 CREATE_KEYSPACE = """
@@ -356,8 +356,6 @@ def bulk_insert(session, dgraph_client, mongo_client):
         if response.status_code == 422:
             print(response.json())  
 
-        
-    
     # Generate and insert daily report
     daily_report = {
         "uuid": str(uuid.uuid4()),
@@ -383,11 +381,6 @@ def bulk_insert(session, dgraph_client, mongo_client):
 
     print("Bulk insert complete!")
     
-
-
-
-
-
 #User the Tickets by Customer table, for usage on admin and customer
 def get_user_tickets(session, customer_id):
     stmt = session.prepare(SELECT_TICKETS_BY_CUSTOMER)

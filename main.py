@@ -11,7 +11,7 @@ from DGraph import modeldgraph
 from Mongodb.routes import router as db_router
 from Mongodb import client as mdb_functions
 
-# Configuración de entornos
+# Main Configuration
 CLUSTER_IPS = os.getenv('CASSANDRA_CLUSTER_IPS', 'localhost')
 KEYSPACE = os.getenv('CASSANDRA_KEYSPACE', 'final_project')
 REPLICATION_FACTOR = os.getenv('CASSANDRA_REPLICATION_FACTOR', '1')
@@ -77,15 +77,8 @@ app = FastAPI(lifespan=lifespan)
 # Rutas de FastAPI
 app.include_router(db_router, tags=["project"])
 
-# Menú interactivo
 def print_menu():
     menu_options = {
-        # 1: "Create data",
-        # 2: "Search user",
-        # 3: "Delete",
-        # 4: "Search Channel",
-        # 5: "Advanced Queries (Pagination, Count)",
-        # 6: "Drop All",
         1: "Insert Bulk Data into Databases",  # option to insert bulk data
         2: "Login",
         3: "Exit",
@@ -122,8 +115,16 @@ def print_admin_menu():
         14: "See tickets by CustomerID",
         15: "Logout"
     }
-    for key, value in menu_options.items():
-        print(f"{key} -- {value}")
+
+    # Determine the total number of menu items
+    num_options = len(menu_options)
+    
+    # Print each row with two options
+    for i in range(1, num_options + 1, 2):
+        option1 = f"{i} -- {menu_options[i]}"
+        option2 = f"{i+1} -- {menu_options[i+1]}" if i+1 <= num_options else ""
+        print(f"{option1:<45} {option2}")
+
 
 def print_agent_menu():
     menu_options = {
@@ -134,16 +135,23 @@ def print_agent_menu():
         5: "Search tickets by filter",
         6: "Update Status and/or Priority Tickers",
         7: "See Customers by ID",
-        8: "Most Recent Tickets by Status(Most Recet at the Top)",
+        8: "Most Recent Tickets by Status (Most Recent at the Top)",
         9: "See my assigned tickets (MongoDB)",
         10: "See tickets by Priority Level",
-        11: "See feedback on my tikcets",
+        11: "See feedback on my tickets",
         12: "Update my profile",
         13: "Update ticket resolution steps",
         14: "Log Out"
     }
-    for key, value in menu_options.items():
-        print(f"{key} -- {value}")
+    
+    # Determine the total number of menu items
+    num_options = len(menu_options)
+    
+    # Print each row with two options
+    for i in range(1, num_options + 1, 2):
+        option1 = f"{i} -- {menu_options[i]}"
+        option2 = f"{i+1} -- {menu_options[i+1]}" if i+1 <= num_options else ""
+        print(f"{option1:<45} {option2}")
 
 def menu_handler():
     """
@@ -184,7 +192,7 @@ def menu_handler():
                         keyword = input("Keyword to search: ")
                         modeldgraph.search_messages_by_keyword(dgraph_client, keyword)
                     if choice_2 == 3:
-                        mdb_functions.add_message_to_ticket(customer_id)
+                        mdb_functions.add_message_to_ticket(customer_id, dgraph_client)
                     if choice_2 == 4:
                         mdb_functions.update_user_profile(customer_id)
                     if choice_2 == 5:
@@ -287,9 +295,6 @@ def menu_handler():
                     elif choice_2 == 15:
                         print("Logging out...")
                         break
-            #get_cassandra_username
-                #Cassandra uses sequencial username id
-            #Mongo_db username
 
         if choice == 3:  # Exit
             print("Exiting...")

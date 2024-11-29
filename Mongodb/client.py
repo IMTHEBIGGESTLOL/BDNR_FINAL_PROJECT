@@ -199,7 +199,6 @@ def search_ticket_admin_by():
         print(f"Error: {response.status_code} - {response.text}")
 
 
-
 # FUNCTION FOR OTHER FUNCTIONS TO QUERY BY AGENTS TICKETS:
 def get_tickets_by_agent(agent_id):
     suffix = f"/tickets/agent/{agent_id}"
@@ -253,7 +252,7 @@ def update_ticket(session, dgraph_client, agent_id):
     response = requests.patch(endpoint, json=update_data)
     if response.ok:
         print("Ticket updated successfully:")
-        # Llamar a funciones para actualizar Cassandra y Dgraph
+        # Call to DGraph and Cassandra update functions
         update_ticket_in_cassandra( dgraph_client ,session, ticket_id, update_data, agent_id)
         update_ticket_in_dgraph(dgraph_client, ticket_id, update_data)
         print_object(response.json())
@@ -265,39 +264,39 @@ from cassandra.query import SimpleStatement
 from datetime import datetime
 
 def update_ticket_in_cassandra( dgraph_client,session, ticket_id, updates, agent_id):
-    # Obtener las claves necesarias para cada tabla
+    # obtain all the needed keys to update them
     ticket_data = modeldgraph.search_ticket(dgraph_client, ticket_id)
-    ticket_id = int(ticket_id)  # Convertir ticket_id a entero
+    ticket_id = int(ticket_id)  # change id type
 
     def fetch_ticket_row(table_name, conditions):
-        # Construir la consulta dependiendo de las claves primarias
+        # In base of the keys of each table we build a select estatement
         base_query = f"SELECT * FROM {table_name} WHERE "
         query_params = []
 
-        # Añadir las condiciones para la consulta basadas en las claves primarias y de agrupamiento
+        # Add all the needed conditions in base of format type
         for field, value in conditions.items():
-            # Si el campo contiene "date", se usa un rango
+            # If it is a Date we use a range
             if "assigned_date" in field:
                 base_query += f"{field} > %s AND "
-            elif isinstance(value, datetime) and "timestamp" in field:  # Si es un campo timestamp
+            elif isinstance(value, datetime) and "timestamp" in field:  # for timestamp
                 base_query += f"{field} > %s AND "
             else:
                 base_query += f"{field} = %s AND "
             query_params.append(value)
-        base_query = base_query.rstrip(" AND ")  # Eliminar el último "AND" extra
+        base_query = base_query.rstrip(" AND ")  # When we finish we eliminate the last AND 
         #input(f"{base_query}")
         result = session.execute(base_query, query_params)
         #input(f"{base_query}")
         row = result.one()
         if row:
-            return dict(row._asdict())  # Convierte Row en diccionario
+            return dict(row._asdict())  # Is easier to work with dictionaries haha
         else:
             return None
 
-    # Fecha límite para la comparación de timestamp (por ejemplo, todas las fechas mayores a 2000-01-01)
-    some_timestamp = datetime.now()  # Fecha y hora actual
-    some_date = some_timestamp.date()  # Solo la fecha
-    timestamp_limit = datetime(2000, 1, 1)  # Fecha límite para comparación de timestamp
+    # A base comparation date 
+    some_timestamp = datetime.now()  # actual Date
+    some_date = some_timestamp.date()  # Only date type
+    timestamp_limit = datetime(2000, 1, 1)  # Timestamp date comparison
     date_limit = datetime(2000, 1, 1).date() 
     #input(f"ticket: {ticket_id}, agent: {agent_id}, datelimit: {date_limit}, timestamp: {timestamp_limit}")
 
@@ -306,15 +305,15 @@ def update_ticket_in_cassandra( dgraph_client,session, ticket_id, updates, agent
     priority = ticket_data[0]['priority']
     customer_id_value = int(customer_id_value)
 
-    # Configuración de las tablas y condiciones necesarias
+    # Every table to update and its own needed keys and values for the update
     tables_to_update = {
-        "ticket_by_date": {"ticket_id": ticket_id, "created_date": some_date, "created_timestamp": timestamp_limit},  # Para buscar fechas mayores a 2000-01-01
+        "ticket_by_date": {"ticket_id": ticket_id, "created_date": some_date, "created_timestamp": timestamp_limit},  # Dates bigger than 2000-01-01
         "tickets_by_agent_date": {"agent_id": agent_id, "ticket_id": ticket_id, "assigned_date": date_limit},
         "tickets_by_customer": {"ticket_id": ticket_id, "customer_id": customer_id_value},
         "urgent_tickets_by_time": { "priority": priority, "agent_id": agent_id, "ticket_id": ticket_id, "created_timestamp": some_date}
     }
 
-    # Obtener los datos actuales de cada tabla
+    # This return the pre-update data from each table
     table_data = {}
     for table, conditions in tables_to_update.items():
         row = fetch_ticket_row(table, conditions)
@@ -322,13 +321,13 @@ def update_ticket_in_cassandra( dgraph_client,session, ticket_id, updates, agent
             table_data[table] = row
         else:
             print(f"Ticket {ticket_id} not found in table {table}")
-            return  # Manejar el caso de no encontrar el ticket
+            return  
 
-    # Extraer el nuevo estado o prioridad, si están en la actualización
+    # Fetch the new values
     new_status = updates.get("status")
     new_priority = updates.get("priority")
 
-    # Generar sentencias de actualización para cada tabla relevante
+    # Generate Updates and all needed queries
     update_queries = []
 
     if new_status:
@@ -367,11 +366,11 @@ def update_ticket_in_cassandra( dgraph_client,session, ticket_id, updates, agent
             WHERE customer_id = {table_data['tickets_by_customer']['customer_id']} AND created_timestamp = '{table_data['tickets_by_customer']['created_timestamp']}'  AND ticket_id = {ticket_id}
         """))
 
-    # Ejecutar todas las actualizaciones
+    # Execute all
     for query in update_queries:
         session.execute(query)
 
-    # Registrar la actividad en Cassandra
+    # We register a nue activity for the updated ticket in a cassandra table
     activity_query = """
         INSERT INTO activity_by_ticket (ticket_id, activity_timestamp, activity_type, status, agent_id)
         VALUES (%s, %s, %s, %s, %s)
@@ -382,33 +381,31 @@ def update_ticket_in_cassandra( dgraph_client,session, ticket_id, updates, agent
 
 def update_ticket_in_dgraph(dgraph_client, ticket_id, update_data):
 
-    # Crear un objeto de cliente de Dgraph
     client = dgraph_client
     txn = client.txn()
     ticket_data = modeldgraph.search_ticket(dgraph_client, ticket_id)
-    # Crear la mutación para actualizar los campos del ticket
+    # Set a new mutation for the update
     mutation = {
         'set': { }
     }
 
-    # Agregar los datos a actualizar
+    # Add the attributes to change
     mutation['set']['uid'] = ticket_data[0]['uid']
     if 'status' in update_data:
         mutation['set']['status'] = update_data['status']
     if 'priority' in update_data:
         mutation['set']['priority'] = update_data['priority']
 
-    # Especificamos el `ticket_id` en la mutación para asegurar que se actualiza el ticket correcto
+    # We especify the ticket id
     mutation['set']['ticket_id'] = ticket_id
 
-    # Realizar la mutación para actualizar los datos en Dgraph
+    # Execute the mutation
     try:
-        # Realizar la mutación en Dgraph
         txn.mutate(set_obj=mutation)
         txn.commit()
-        print(f"Ticket {ticket_id} actualizado en Dgraph.")
+        print(f"Ticket {ticket_id} updated in Dgraph.")
     except Exception as e:
-        print(f"Error al actualizar el ticket en Dgraph: {e}")
+        print(f"Error: {e}")
 
 
 # FUNCTIONS FOR AGGREGATIONS
@@ -465,11 +462,8 @@ def fetch_recent_tickets(agent_id):
     else:
         print(f"Error fetching recent tickets: {response.status_code} - {response.text}")
 
-
-
 def fetch_tickets_by_prioritylevels(agent_id):
     url = f"{PROJECT_API_URL}/tickets/priority_level"
-
 
     params = {"agent_id": agent_id} 
     response = requests.get(url, params=params)
@@ -482,8 +476,6 @@ def fetch_tickets_by_prioritylevels(agent_id):
 
     else:
         print(f"Error fetching recent tickets: {response.status_code} - {response.text}")
-
-
 
 def fetch_tickets_admin_by_prioritylevels():
     url = f"{PROJECT_API_URL}/tickets/admins/priority_level"
@@ -541,7 +533,7 @@ def get_ticket_admin_feedback():
     except Exception as e:
         print(f"An error occurred: {e}")
     
-def add_message_to_ticket(customer_id):
+def add_message_to_ticket(customer_id, dgraph_client):
     ticket_uuid = input("Please enter the Ticket ID you want to add your message to: ")
     message_text = input("Enter your message: ")
 
@@ -556,13 +548,12 @@ def add_message_to_ticket(customer_id):
             result = response.json()
             print(result["message"])
             print(f"New message added: {result['new_message']}")
+            modeldgraph.create_message(dgraph_client, message_text, customer_id, ticket_uuid)
         else:
             print(f"Error: {response.status_code} - {response.text}")
     
     except Exception as e:
         print(f"An error occurred: {e}")
-
-
 
 def fetch_daily_report(report_date):
     
