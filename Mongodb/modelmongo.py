@@ -2,6 +2,7 @@
 import uuid
 from typing import Optional, List
 from pydantic import BaseModel, Field
+from typing import List, Dict, Any
 
 class User(BaseModel):
     uuid: str = Field(...)
@@ -106,14 +107,16 @@ class Ticket(BaseModel):
 
 
 class UpdateTicket(BaseModel):
-    status: Optional[str]  # Optional, allows updates to the status field
-    priority: Optional[str]  # Optional, allows updates to the priority field
-    resolution_steps: Optional[List[str]]  # Optional, allows updates to the resolution steps
+    status: Optional[str]  
+    priority: Optional[str] 
+
+class UpdateResolutionSteps(BaseModel):
+    steps: List[str]
 
 class AgentAssignment(BaseModel):
     uuid: str = Field(...)
-    agent_id: str = Field(...)  # references Users collection
-    ticket_id: str = Field(...)  # references Tickets collection
+    agent_id: str = Field(...) 
+    ticket_id: str = Field(...)  
     assigned_timestamp: str = Field(...)
     priority_level: str = Field(...)
 

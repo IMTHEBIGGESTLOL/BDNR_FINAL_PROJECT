@@ -98,7 +98,8 @@ def print_customer_menu():
         1: "See my tickets",
         2: "Search my comments",
         3: "Add message to Ticket",
-        4: "Log Out"
+        4: "Update my Profile",
+        5: "Log Out"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -116,7 +117,10 @@ def print_admin_menu():
         9: "See tickets by Priority Level",
         10: "See feedback on tikcets",
         11: "Daily Multi-Channel Report",
-        12: "Logout"
+        12: "Update tickets resolution steps",
+        13: "Delete ticket",
+        14: "See tickets by CustomerID",
+        15: "Logout"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -134,7 +138,9 @@ def print_agent_menu():
         9: "See my assigned tickets (MongoDB)",
         10: "See tickets by Priority Level",
         11: "See feedback on my tikcets",
-        12: "Log Out"
+        12: "Update my profile",
+        13: "Update ticket resolution steps",
+        14: "Log Out"
     }
     for key, value in menu_options.items():
         print(f"{key} -- {value}")
@@ -180,6 +186,8 @@ def menu_handler():
                     if choice_2 == 3:
                         mdb_functions.add_message_to_ticket(customer_id)
                     if choice_2 == 4:
+                        mdb_functions.update_user_profile(customer_id)
+                    if choice_2 == 5:
                         print("Logging out")
                         break
             if role == 'agent':
@@ -223,6 +231,10 @@ def menu_handler():
                     elif choice_2 == 11:
                         mdb_functions.get_ticket_feedback(agent_id)
                     elif choice_2 == 12:
+                        mdb_functions.update_user_profile(f"{agent_id}_")
+                    elif choice_2 == 13:
+                        mdb_functions.update_ticket_resolution_steps(agent_id)
+                    elif choice_2 == 14:
                         print("Logging out...")
                         break
 
@@ -267,6 +279,12 @@ def menu_handler():
                         date_obj = datetime.strptime(date, '%Y-%m-%d').date()
                         mdb_functions.fetch_daily_report(date_obj)
                     elif choice_2 == 12:
+                        mdb_functions.update_admins_ticket_resolution_steps()
+                    elif choice_2 == 13:
+                        mdb_functions.delete_ticket()
+                    elif choice_2 == 14:
+                        mdb_functions.fetch_tickets_by_customer()
+                    elif choice_2 == 15:
                         print("Logging out...")
                         break
             #get_cassandra_username

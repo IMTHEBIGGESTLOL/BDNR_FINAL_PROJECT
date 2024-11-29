@@ -11,7 +11,8 @@ from typing import List, Dict, Any
 from datetime import datetime
 
 
-from .modelmongo import User, Ticket, AgentAssignment, DailyReport, UpdateUser, UpdateTicket
+from .modelmongo import User, Ticket, AgentAssignment, DailyReport, UpdateUser, UpdateTicket, UpdateResolutionSteps
+from typing import Dict, Optional
 
 router = APIRouter()
 
@@ -350,7 +351,6 @@ async def get_ticket_feedback(ticket_uuid: str, agent_id: str = None):
     if not agent_id:
         raise HTTPException(status_code=422, detail="Agent ID is required")
 
-    # Check if the agent has any ticket assignments
     agents = list(db.agent_assignments.find({"agent_id": agent_id}))
     if not agents:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -360,13 +360,11 @@ async def get_ticket_feedback(ticket_uuid: str, agent_id: str = None):
         return {"message": "No tickets assigned to this agent"}
 
     try:
-        # Retrieve the ticket feedback from the tickets collection
         ticket = db.tickets.find_one({"uuid": ticket_uuid, "uuid": {"$in": ticket_ids}}, {"_id": 0, "feedback": 1})
 
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
 
-        # Return the feedback
         return ticket.get("feedback", {})
 
     except Exception as e:
@@ -393,29 +391,24 @@ class MessageRequest(BaseModel):
 @router.post("/tickets/{ticket_uuid}/messages", response_model=Dict[str, Any])
 async def add_message_to_ticket(ticket_uuid: str, customer_id: str, message: MessageRequest = Body(...)):
     try:
-        # Find the ticket by ticket_uuid and check if it belongs to the customer
         ticket = db.tickets.find_one({"uuid": ticket_uuid, "customer_id": customer_id})
         
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found or does not belong to this customer")
 
-        # Get the current timestamp for the message
         timestamp = datetime.utcnow().isoformat()
 
-        # Create the new message
         new_message = {
             "sender_id": customer_id,
             "timestamp": timestamp,
             "message_text": message.text
         }
 
-        # Add the new message to the existing messages list
         db.tickets.update_one(
             {"uuid": ticket_uuid},
             {"$push": {"messages": new_message}}
         )
 
-        # Return the updated ticket with the new message added
         return {"message": "Message added successfully", "ticket_uuid": ticket_uuid, "new_message": new_message}
 
     except Exception as e:
@@ -424,7 +417,6 @@ async def add_message_to_ticket(ticket_uuid: str, customer_id: str, message: Mes
 @router.get("/daily_reports/{report_date}", response_model=DailyReport)
 async def get_daily_report(report_date: str):
     try:
-        # Find the daily report by date
         report = db.daily_reports.find_one({"report_date": report_date}, {"_id": 0})
         
         if not report:
@@ -433,6 +425,116 @@ async def get_daily_report(report_date: str):
         return report
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching daily report: {str(e)}")
+
+
+class UpdateUserProfile(BaseModel):
+    name: Optional[str] = None
+    phone_number: Optional[str] = None
+    preferences: Optional[Dict[str, str]] = None
+    profile_picture: Optional[str] = None
+
+
+
+# UPDATE USER PROFILE INFO
+@router.put("/users/{user_id}/profile", response_model=Dict[str, str])
+async def update_user_profile(user_id: str, profile_update: UpdateUserProfile):
+    try:
+        # Prepare the fields to update
+        update_data = {f"profile.{key}": value for key, value in profile_update.dict(exclude_none=True).items()}
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields provided to update")
+
+        # Update the user's profile in the database
+        result = db.users.update_one({"uuid": user_id},  {"$set": {"profile": update_data}})
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        updated_user = db.users.find_one({"uuid": user_id}, {"_id": 0, "profile": 1})
+
+        return {"message": "Profile updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating user profile: {str(e)}")
+
+# TICKET UPDATE RESOLUTIONS STEPS
+@router.put("/tickets/{ticket_uuid}/resolution_steps", response_model=Dict[str, str])
+async def update_resolution_steps(
+    ticket_uuid: str, 
+    update_steps: UpdateResolutionSteps, 
+    agent_id: str
+):
+    try:
+        agents = list(db.agent_assignments.find({"agent_id": agent_id}))
+        if not agents:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        ticket_ids = [assignment.get("ticket_id") for assignment in agents]
+        if not ticket_ids:
+            return {"message": "No tickets assigned to this agent"}
+        
+        if ticket_uuid not in ticket_ids:
+            return {"message": "Ticket not assigned to this agent"}
+
+
+        result = db.tickets.update_one(
+            {"uuid": ticket_uuid},
+            {"$set": {"resolution_steps": update_steps.steps}}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Ticket not found.")
+
+        return {"message": "Resolution steps updated successfully."}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating resolution steps: {str(e)}")
+
+@router.put("/tickets/admins/{ticket_uuid}/resolution_steps", response_model=Dict[str, str])
+async def update_admins_resolution_steps(
+    ticket_uuid: str, 
+    update_steps: UpdateResolutionSteps, 
+):
+    try:
+        result = db.tickets.update_one(
+            {"uuid": ticket_uuid},
+            {"$set": {"resolution_steps": update_steps.steps}}
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Ticket not found.")
+
+        return {"message": "Resolution steps updated successfully."}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating resolution steps: {str(e)}")
+
+@router.delete("/tickets/{ticket_id}", response_model=Dict[str, str])
+async def delete_ticket(ticket_id: str):
+
+    try:
+        result = db.tickets.delete_one({"uuid": ticket_id})
+
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Ticket not found.")
+
+        return {"message": "Ticket deleted successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting ticket: {str(e)}")
+
+
+@router.get("/tickets/customer/{customer_id}", response_model=List[Dict[str, Any]])
+async def get_tickets_by_customer(customer_id: str):
+
+    try:
+        tickets = list(db.tickets.find({"customer_id": customer_id}, {"_id": 0}))
+
+        if not tickets:
+            raise HTTPException(status_code=404, detail="No tickets found for this customer.")
+
+        return tickets
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving tickets: {str(e)}")
 
 
 #Base URL

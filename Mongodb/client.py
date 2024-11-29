@@ -1,10 +1,12 @@
+
 #!/usr/bin/env python3
 import argparse
 import logging
 import os
 import requests
 from datetime import datetime
-#from DGraph import modeldgraph
+from DGraph import modeldgraph
+
 
 # Set logger
 log = logging.getLogger()
@@ -91,12 +93,10 @@ def get_customer():
 
 # FUNCTIONS TO SEARCH ALL TICKETS BY MULTIPLE FILTERS
 def search_ticket_by(agent_id):
-    # If no agent_id is provided, we prompt for it (assuming agent_id is required)
     if agent_id is None:
         agent_id = input("Enter your Agent ID: ")
 
-    # Call the function to get the tickets assigned to the agent
-    get_tickets_by_agent(agent_id)  # Show the tickets assigned to this agent
+    get_tickets_by_agent(agent_id)
 
     print("Filter Options:")
     print("1. Customer ID")
@@ -426,7 +426,7 @@ def fetch_recent_admin_tickets():
         print("Invalid status choice")
         return
 
-    params = {"status": status}  # Send the status as a query parameter
+    params = {"status": status} 
     response = requests.get(url, params=params)
 
     if response.status_code == 200:
@@ -453,7 +453,7 @@ def fetch_recent_tickets(agent_id):
         print("Invalid status choice")
         return
 
-    params = {"status": status, "agent_id": agent_id}  # Send the status as a query parameter
+    params = {"status": status, "agent_id": agent_id} 
     response = requests.get(url, params=params)
 
     if response.status_code == 200:
@@ -471,7 +471,7 @@ def fetch_tickets_by_prioritylevels(agent_id):
     url = f"{PROJECT_API_URL}/tickets/priority_level"
 
 
-    params = {"agent_id": agent_id}  # Send the status as a query parameter
+    params = {"agent_id": agent_id} 
     response = requests.get(url, params=params)
 
     if response.status_code == 200:
@@ -545,19 +545,14 @@ def add_message_to_ticket(customer_id):
     ticket_uuid = input("Please enter the Ticket ID you want to add your message to: ")
     message_text = input("Enter your message: ")
 
-    # Define the URL for adding a message to the ticket
     url = f"{PROJECT_API_URL}/tickets/{ticket_uuid}/messages?customer_id={customer_id}"
 
-    # Prepare the payload with the message text
     payload = {"text": message_text}
 
     try:
-        # Send the POST request to the FastAPI route
         response = requests.post(url, json=payload)
 
-        # Check if the request was successful
         if response.status_code == 200:
-            # Print the response message
             result = response.json()
             print(result["message"])
             print(f"New message added: {result['new_message']}")
@@ -570,6 +565,7 @@ def add_message_to_ticket(customer_id):
 
 
 def fetch_daily_report(report_date):
+    
     url = f"{PROJECT_API_URL}/daily_reports/{report_date}"
 
     try:
@@ -590,5 +586,123 @@ def fetch_daily_report(report_date):
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
+def update_user_profile(user_id):
+    url = f"{PROJECT_API_URL}/users/{user_id}/profile"
+
+    print("Enter the fields to update (leave blank to skip):")
+    name = input("Name: ").strip() or None
+    phone_number = input("Phone Number: ").strip() or None
+    contact_channel = input("Contact Channel (e.g., email, phone): ").strip() or None
+    profile_picture = input("Profile Picture URL: ").strip() or None
+
+    payload = {
+        "name": name,
+        "phone_number": phone_number,
+        "preferences": {"contact_channel": contact_channel} if contact_channel else None,
+        "profile_picture": profile_picture,
+    }
+
+    payload = {key: value for key, value in payload.items() if value is not None}
+
+    if not payload:
+        print("No fields provided to update.")
+        return
+
+    try:
+        response = requests.put(url, json=payload)
+
+        if response.status_code == 200:
+            print(response.json()["message"])
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+def update_ticket_resolution_steps(agent_id):
+    ticket_uuid = input("Enter the ticket ID to update: ").strip()
+    print("Enter the resolution steps (comma-separated):")
+    steps = input("Steps: ").strip().split(",")
+
+    url = f"{PROJECT_API_URL}/tickets/{ticket_uuid}/resolution_steps?agent_id={agent_id}"
+
+    payload = {"steps": [step.strip() for step in steps if step.strip()]}
+
+    if not payload["steps"]:
+        print("No resolution steps provided.")
+        return
+
+    try:
+        response = requests.put(url, json=payload)
+
+        if response.status_code == 200:
+            print(response.json()["message"])
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+def update_admins_ticket_resolution_steps():
+    ticket_uuid = input("Enter the ticket ID to update: ").strip()
+    print("Enter the resolution steps (comma-separated):")
+    steps = input("Steps: ").strip().split(",")
+
+    url = f"{PROJECT_API_URL}/tickets/admins/{ticket_uuid}/resolution_steps"
+
+    payload = {"steps": [step.strip() for step in steps if step.strip()]}
+
+    if not payload["steps"]:
+        print("No resolution steps provided.")
+        return
+
+    try:
+        response = requests.put(url, json=payload)
+
+        if response.status_code == 200:
+            print(response.json()["message"])
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+def delete_ticket():
+    ticket_id = input("Enter the ticket ID to delete: ").strip()
+
+    url = f"{PROJECT_API_URL}/tickets/{ticket_id}"
+
+    try:
+        response = requests.delete(url)
+
+        if response.status_code == 200:
+            print(response.json()["message"])
+        elif response.status_code == 404:
+            print("Error: Ticket not found.")
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+def fetch_tickets_by_customer():
+    customer_id = input("Enter the customer ID to retrieve tickets for: ").strip()
+
+    url = f"{PROJECT_API_URL}/tickets/customer/{customer_id}"
+
+    try:
+        response = requests.get(url)
+
+        if response.status_code == 200:
+            tickets = response.json()
+            print(f"Tickets for customer ID {customer_id}:")
+            for ticket in tickets:
+                print(f"- Ticket ID: {ticket['uuid']}, Priority: {ticket['priority']}, Status: {ticket['status']}")
+        elif response.status_code == 404:
+            print("No tickets found for this customer.")
+        else:
+            print(f"Error: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
 if __name__ == "__main__":
-    fetch_daily_report()
+    fetch_tickets_by_customer()
+    
